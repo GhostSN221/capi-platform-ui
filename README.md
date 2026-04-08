@@ -1,4 +1,3 @@
-
 # CAPI Platform UI
 
 I got tired of writing YAML every time I needed to spin up a Kubernetes cluster with CAPI on OpenStack.
@@ -11,9 +10,12 @@ So I built this.
 
 ## Screenshots
 
-![Login](docs/screenshots/login.png)
-![Dashboard](docs/screenshots/dashboard.png)
-![Cluster detail](docs/screenshots/cluster-detail.png)
+<table>
+  <tr>
+    <td><img src="docs/screenshots/login.png" alt="Login" width="100%"/></td>
+    <td><img src="docs/screenshots/dashboard.png" alt="Dashboard" width="100%"/></td>
+  </tr>
+</table>
 
 ---
 
@@ -121,5 +123,4 @@ Issues and PRs are welcome.
 ## License
 
 Apache 2.0
-
 
