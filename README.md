@@ -14,10 +14,6 @@ So I built this.
 ![Login](docs/screenshots/login.png)
 ![Dashboard](docs/screenshots/dashboard.png)
 ![Cluster detail](docs/screenshots/cluster-detail.png)
-![Create cluster](docs/screenshots/cluster-create.png)
-![Templates](docs/screenshots/templates.png)
-![Admin](docs/screenshots/admin.png)
-![Audit](docs/screenshots/audit.png)
 
 ---
 
