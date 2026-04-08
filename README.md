@@ -1,3 +1,4 @@
+
 # CAPI Platform UI
 
 I got tired of writing YAML every time I needed to spin up a Kubernetes cluster with CAPI on OpenStack.
@@ -5,6 +6,18 @@ I got tired of writing YAML every time I needed to spin up a Kubernetes cluster 
 One cluster = 7+ manifests. Three clients = do the math. And if you get one `apiVersion` wrong, you spend the next hour debugging a cryptic 422 error.
 
 So I built this.
+
+---
+
+## Screenshots
+
+![Login](docs/screenshots/login.png)
+![Dashboard](docs/screenshots/dashboard.png)
+![Cluster detail](docs/screenshots/cluster-detail.png)
+![Create cluster](docs/screenshots/cluster-create.png)
+![Templates](docs/screenshots/templates.png)
+![Admin](docs/screenshots/admin.png)
+![Audit](docs/screenshots/audit.png)
 
 ---
 
@@ -112,3 +125,5 @@ Issues and PRs are welcome.
 ## License
 
 Apache 2.0
+
+
