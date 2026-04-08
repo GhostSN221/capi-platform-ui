@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: capi-platform-backend
+  namespace: capi-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: capi-platform-backend
+  template:
+    metadata:
+      labels:
+        app: capi-platform-backend
+    spec:
+      serviceAccountName: capi-platform
+      containers:
+        - name: backend
+          image: mouhmedsn02/capi-platform-backend:e907e627
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: capi-platform-config
+            - secretRef:
+                name: capi-platform-secret
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

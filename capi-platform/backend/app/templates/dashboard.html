@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row">
+    <h1 id="title">Clusters</h1>
+    <a href="/clusters/new" class="btn">+ Nouveau cluster</a>
+</div>
+
+<div class="stat-grid" id="stat-grid">
+    <div class="stat-card">
+        <div class="stat-label">Total</div>
+        <div class="stat-value" id="stat-total">—</div>
+        <div class="stat-sub">clusters</div>
+    </div>
+    <div class="stat-card" id="card-ready">
+        <div class="stat-label">Prêts</div>
+        <div class="stat-value" id="stat-ready">—</div>
+        <div class="stat-sub">Ready</div>
+    </div>
+    <div class="stat-card" id="card-provisioning">
+        <div class="stat-label">En cours</div>
+        <div class="stat-value" id="stat-provisioning">—</div>
+        <div class="stat-sub">Provisioning</div>
+    </div>
+    <div class="stat-card" id="card-error">
+        <div class="stat-label">En erreur</div>
+        <div class="stat-value" id="stat-error">—</div>
+        <div class="stat-sub">Failed</div>
+    </div>
+</div>
+
+<div id="grid" class="clusters-grid"></div>
+<div id="empty" class="empty" style="display:none">
+    Aucun cluster.
+    <a href="/clusters/new" class="btn btn-sm" style="margin-left:12px">Créer un cluster</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    if (!requireAuth()) {}
+    window._baseLoadNavUser({ checkTenant: true });
+
+    async function load() {
+        const clusters = await api.listClusters();
+        document.getElementById('title').textContent = `Clusters (${clusters.length})`;
+
+        const nReady = clusters.filter(c => c.status === 'Ready').length;
+        const nProv  = clusters.filter(c => c.status === 'Provisioning').length;
+        const nErr   = clusters.filter(c => c.status === 'Failed').length;
+
+        document.getElementById('stat-total').textContent       = clusters.length;
+        document.getElementById('stat-ready').textContent       = nReady;
+        document.getElementById('stat-provisioning').textContent = nProv;
+        document.getElementById('stat-error').textContent       = nErr;
+
+        const cardReady = document.getElementById('card-ready');
+        const cardProv  = document.getElementById('card-provisioning');
+        const cardErr   = document.getElementById('card-error');
+        cardReady.className = 'stat-card' + (nReady > 0 ? ' stat-ready' : '');
+        cardProv.className  = 'stat-card' + (nProv > 0  ? ' stat-provisioning' : '');
+        cardErr.className   = 'stat-card' + (nErr > 0   ? ' stat-error' : '');
+
+        const grid  = document.getElementById('grid');
+        const empty = document.getElementById('empty');
+
+        if (clusters.length === 0) {
+            grid.innerHTML = '';
+            empty.style.display = '';
+            return;
+        }
+        empty.style.display = 'none';
+        grid.innerHTML = clusters.map(c => `
+            <div class="cluster-card">
+                <div class="cluster-card-header">
+                    <div>
+                        <div class="cluster-card-name">${c.name}</div>
+                        <div class="cluster-card-tenant">${c.namespace || '—'}</div>
+                    </div>
+                    ${badge(c.status)}
+                </div>
+                <div class="cluster-card-meta">
+                    <span><strong>Version</strong> ${c.k8s_version || '—'}</span>
+                    <span><strong>Workers</strong> ${c.worker_count ?? '—'} × ${c.worker_flavor || '—'}</span>
+                    <span><strong>CP</strong> ${c.cp_flavor || '—'}</span>
+                </div>
+                <div class="cluster-card-actions">
+                    <a href="/clusters/${c.name}" class="btn btn-sm" style="flex:1;justify-content:center">Détails →</a>
+                    <button class="btn-danger btn-sm" onclick="del('${c.name}')">Supprimer</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async function del(name) {
+        if (!confirm(`Supprimer "${name}" ?`)) return;
+        await api.deleteCluster(name);
+        load();
+    }
+
+    load();
+    setInterval(load, 15000);
+</script>
+{% endblock %}

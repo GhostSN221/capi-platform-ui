@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: capi-platform-config
+  namespace: capi-platform
+data:
+  DATABASE_URL: "postgresql+asyncpg://capi:capi@postgres:5432/capidb"
+  REDIS_URL: "redis://redis:6379"

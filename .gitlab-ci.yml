@@ -1,0 +1,40 @@
+stages:
+  - build
+  - update-manifests
+
+variables:
+  BACKEND_IMAGE: mouhmedsn02/capi-platform-backend
+
+build-backend:
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  only:
+    - main
+  script:
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"https://index.docker.io/v1/\":{\"auth\":\"$DOCKERHUB_AUTH\"}}}" > /kaniko/.docker/config.json
+    - /kaniko/executor
+      --context $CI_PROJECT_DIR/capi-platform/backend
+      --dockerfile $CI_PROJECT_DIR/capi-platform/backend/Dockerfile
+      --destination $BACKEND_IMAGE:$CI_COMMIT_SHORT_SHA
+      --destination $BACKEND_IMAGE:latest
+      --cache=true
+      --cache-repo=$BACKEND_IMAGE-cache
+
+update-manifests:
+  stage: update-manifests
+  image: alpine/git
+  only:
+    - main
+  before_script:
+    - git config --global user.name "gitlab-ci"
+    - git config --global user.email "gitlab-ci@systalink.fr"
+    - git remote set-url origin https://Mouhmedsn02:${GITLAB_TOKEN}@git.systalink.fr/Mouhmedsn02/capi_platform_v2.git
+  script:
+    - git checkout main
+    - sed -i "s|$BACKEND_IMAGE:.*|$BACKEND_IMAGE:$CI_COMMIT_SHORT_SHA|g" capi-platform/k8s/deployment-backend.yaml
+    - git add capi-platform/k8s/deployment-backend.yaml
+    - git diff --staged --quiet && echo "no changes" || git commit -m "ci-update-$CI_COMMIT_SHORT_SHA [skip ci]"
+    - git push origin main

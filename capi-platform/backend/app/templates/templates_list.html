@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row">
+    <h1 id="title">Templates de cluster</h1>
+    <a href="/clusters/new" class="btn">+ Nouveau cluster</a>
+</div>
+<div id="empty" class="empty" style="display:none">Aucun template. Créez-en depuis le formulaire de cluster.</div>
+<div class="card" style="padding:0">
+    <table id="tpl-table">
+        <thead><tr>
+            <th>Nom</th>
+            <th>Version K8s</th>
+            <th>CP Flavor</th>
+            <th>Worker Flavor</th>
+            <th>Workers</th>
+            <th>Description</th>
+            <th></th>
+        </tr></thead>
+        <tbody id="tpl-body">
+            <tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:32px">Chargement…</td></tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    if (!requireAuth()) {}
+    loadNavUser();
+
+    async function load() {
+        const tpls = await api.listTemplates();
+        document.getElementById('title').textContent = `Templates de cluster (${tpls.length})`;
+        const tbody = document.getElementById('tpl-body');
+        const empty = document.getElementById('empty');
+        const table = document.getElementById('tpl-table');
+        if (tpls.length === 0) {
+            table.style.display = 'none';
+            empty.style.display = '';
+            return;
+        }
+        table.style.display = '';
+        empty.style.display = 'none';
+        tbody.innerHTML = tpls.map(t => `
+            <tr>
+                <td style="font-weight:500">${t.name}</td>
+                <td>${t.k8s_version}</td>
+                <td>${t.cp_flavor}</td>
+                <td>${t.worker_flavor}</td>
+                <td>${t.worker_count}</td>
+                <td style="color:#64748b;font-size:13px">${t.description || '—'}</td>
+                <td>
+                    <button class="btn-danger" onclick="del(${t.id}, '${t.name}')">Supprimer</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    async function del(id, name) {
+        if (!confirm(`Supprimer le template "${name}" ?`)) return;
+        await api.deleteTemplate(id);
+        load();
+    }
+
+    load();
+</script>
+{% endblock %}

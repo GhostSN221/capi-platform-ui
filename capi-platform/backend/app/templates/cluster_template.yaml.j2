@@ -1,0 +1,145 @@
+---
+apiVersion: cluster.x-k8s.io/v1beta2
+kind: Cluster
+metadata:
+  name: {{ cluster_name }}
+  namespace: {{ namespace }}
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks: ["192.168.0.0/16"]
+    services:
+      cidrBlocks: ["10.96.0.0/12"]
+  infrastructureRef:
+    apiGroup: infrastructure.cluster.x-k8s.io
+    kind: OpenStackCluster
+    name: {{ cluster_name }}
+  controlPlaneRef:
+    apiGroup: controlplane.cluster.x-k8s.io
+    kind: KubeadmControlPlane
+    name: {{ cluster_name }}-cp
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OpenStackCluster
+metadata:
+  name: {{ cluster_name }}
+  namespace: {{ namespace }}
+spec:
+  identityRef:
+    cloudName: {{ os_cloud }}
+    name: {{ os_cloud }}-cloud-config
+    type: Secret
+  externalNetwork:
+    id: {{ external_network_id }}
+  managedSubnets:
+    - cidr: "10.6.0.0/24"
+      dnsNameservers:
+        - "8.8.8.8"
+  managedSecurityGroups:
+    allowAllInClusterTraffic: true
+---
+apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+kind: KubeadmControlPlane
+metadata:
+  name: {{ cluster_name }}-cp
+  namespace: {{ namespace }}
+spec:
+  replicas: 1
+  version: {{ k8s_version }}
+  machineTemplate:
+    spec:
+      infrastructureRef:
+        apiGroup: infrastructure.cluster.x-k8s.io
+        kind: OpenStackMachineTemplate
+        name: {{ cluster_name }}-cp
+  kubeadmConfigSpec:
+    initConfiguration:
+      nodeRegistration:
+        kubeletExtraArgs:
+          - name: cloud-provider
+            value: external
+    clusterConfiguration:
+      apiServer:
+        extraArgs:
+          - name: cloud-provider
+            value: external
+      controllerManager:
+        extraArgs:
+          - name: cloud-provider
+            value: external
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OpenStackMachineTemplate
+metadata:
+  name: {{ cluster_name }}-cp
+  namespace: {{ namespace }}
+spec:
+  template:
+    spec:
+      flavor: {{ cp_flavor }}
+      image:
+        filter:
+          name: ubuntu-2404-kube-{{ k8s_version }}
+      identityRef:
+        cloudName: {{ os_cloud }}
+        name: {{ os_cloud }}-cloud-config
+        type: Secret
+---
+apiVersion: cluster.x-k8s.io/v1beta2
+kind: MachineDeployment
+metadata:
+  name: {{ cluster_name }}-workers
+  namespace: {{ namespace }}
+spec:
+  clusterName: {{ cluster_name }}
+  replicas: {{ worker_count }}
+  selector:
+    matchLabels:
+      cluster.x-k8s.io/cluster-name: {{ cluster_name }}
+  template:
+    metadata:
+      labels:
+        cluster.x-k8s.io/cluster-name: {{ cluster_name }}
+    spec:
+      clusterName: {{ cluster_name }}
+      version: {{ k8s_version }}
+      bootstrap:
+        configRef:
+          apiGroup: bootstrap.cluster.x-k8s.io
+          kind: KubeadmConfigTemplate
+          name: {{ cluster_name }}-workers
+      infrastructureRef:
+        apiGroup: infrastructure.cluster.x-k8s.io
+        kind: OpenStackMachineTemplate
+        name: {{ cluster_name }}-workers
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OpenStackMachineTemplate
+metadata:
+  name: {{ cluster_name }}-workers
+  namespace: {{ namespace }}
+spec:
+  template:
+    spec:
+      flavor: {{ worker_flavor }}
+      image:
+        filter:
+          name: ubuntu-2404-kube-{{ k8s_version }}
+      identityRef:
+        cloudName: {{ os_cloud }}
+        name: {{ os_cloud }}-cloud-config
+        type: Secret
+---
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
+kind: KubeadmConfigTemplate
+metadata:
+  name: {{ cluster_name }}-workers
+  namespace: {{ namespace }}
+spec:
+  template:
+    spec:
+      joinConfiguration:
+        nodeRegistration:
+          kubeletExtraArgs:
+            - name: cloud-provider
+              value: external

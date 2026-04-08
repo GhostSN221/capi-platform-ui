@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 style="margin-bottom:8px">Configuration OpenStack</h1>
+<p style="color:#64748b;font-size:14px;margin-bottom:24px">
+    Choisissez le namespace Kubernetes dans lequel vos clusters seront créés.
+</p>
+
+<div class="card" style="max-width:540px">
+    <label>Namespace Kubernetes (CAPI)</label>
+    <input type="text" id="namespace" placeholder="ex: capi-platform" />
+
+    <div class="error" id="error"></div>
+
+    <div style="margin-top:24px">
+        <button class="btn" style="width:100%" id="submit-btn" onclick="doSetup()">
+            Valider la configuration
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    if (!requireAuth()) {}
+    loadNavUser();
+
+    async function doSetup() {
+        const btn = document.getElementById('submit-btn');
+        const ns  = document.getElementById('namespace').value.trim();
+        const err = document.getElementById('error');
+
+        if (!ns) { err.textContent = 'Le namespace est requis.'; return; }
+
+        btn.disabled = true;
+        btn.textContent = 'Configuration en cours…';
+        err.textContent = '';
+
+        const form = new FormData();
+        form.append('namespace', ns);
+
+        try {
+            const res = await fetch('/api/setup/', {
+                method: 'POST',
+                headers: { Authorization: 'Bearer ' + token() },
+                body: form,
+            });
+            if (!res.ok) throw new Error((await res.json()).detail || await res.text());
+            window.location.href = '/dashboard';
+        } catch (e) {
+            err.textContent = String(e);
+            btn.disabled = false;
+            btn.textContent = 'Valider la configuration';
+        }
+    }
+</script>
+{% endblock %}

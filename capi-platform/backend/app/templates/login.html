@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Systalink — CAPI Platform</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        body { margin: 0; background: #0d0c1f; }
+        .login-wrap {
+            min-height: 100vh;
+            display: flex;
+            align-items: stretch;
+        }
+        .login-left {
+            flex: 1;
+            padding: 48px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            border-right: 1px solid rgba(255,255,255,0.06);
+        }
+        .login-logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .login-logo-box {
+            width: 36px; height: 36px;
+            background: #7c3aed;
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px; color: #fff;
+            flex-shrink: 0;
+        }
+        .login-logo-name { font-size: 16px; font-weight: 600; color: #e2e0ff; }
+        .login-logo-sub  { font-size: 11px; color: #4d4a7a; margin-top: 1px; }
+        .login-hero { padding: 0 8px; }
+        .login-hero h1 {
+            font-size: 28px; font-weight: 700; color: #e2e0ff;
+            line-height: 1.2; margin-bottom: 12px;
+        }
+        .login-hero h1 span { color: #a78bfa; }
+        .login-hero p { font-size: 13px; color: #4d4a7a; line-height: 1.6; }
+        .login-features { display: flex; flex-direction: column; gap: 10px; }
+        .login-feat {
+            display: flex; align-items: center; gap: 10px;
+            font-size: 12px; color: #6b68a0;
+        }
+        .login-feat-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%; background: #7c3aed; flex-shrink: 0;
+        }
+        .login-right {
+            width: 400px;
+            padding: 48px 40px;
+            display: flex; flex-direction: column; justify-content: center;
+            background: #0f0e24;
+        }
+        .login-form-title { font-size: 20px; font-weight: 600; color: #e2e0ff; margin-bottom: 4px; }
+        .login-form-sub   { font-size: 12px; color: #4d4a7a; margin-bottom: 32px; }
+        .login-field { margin-bottom: 16px; }
+        .login-field label {
+            display: block; font-size: 11px; font-weight: 500;
+            color: #6b68a0; text-transform: uppercase;
+            letter-spacing: .6px; margin-bottom: 6px;
+        }
+        .login-field input {
+            width: 100%; padding: 10px 14px;
+            background: #1a1836;
+            border: 1px solid rgba(124,58,237,0.2);
+            border-radius: 8px; font-size: 13px; color: #e2e0ff; outline: none;
+            transition: border-color .15s;
+        }
+        .login-field input:focus { border-color: #7c3aed; }
+        .login-field input::placeholder { color: #3d3a6b; }
+        .login-btn {
+            width: 100%; padding: 11px;
+            background: #7c3aed; color: #fff;
+            border: none; border-radius: 8px;
+            font-size: 14px; font-weight: 500; cursor: pointer;
+            margin-top: 8px;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            transition: background .12s;
+        }
+        .login-btn:hover { background: #6d28d9; }
+        .login-btn:disabled { background: #4c1d95; cursor: not-allowed; }
+        .login-error { color: #f87171; font-size: 12px; margin-top: 10px; min-height: 18px; }
+        .login-divider { border: none; border-top: 1px solid rgba(255,255,255,0.05); margin: 24px 0; }
+        .login-footer { font-size: 11px; color: #2d2b52; text-align: center; }
+        .login-footer span { color: #4d4a7a; }
+        @media (max-width: 768px) {
+            .login-left { display: none; }
+            .login-right { width: 100%; padding: 40px 24px; }
+        }
+    </style>
+</head>
+<body>
+<div class="login-wrap">
+    <div class="login-left">
+        <div class="login-logo">
+            <div class="login-logo-box">⎈</div>
+            <div>
+                <div class="login-logo-name">Systalink</div>
+                <div class="login-logo-sub">Cloud Infrastructure</div>
+            </div>
+        </div>
+        <div class="login-hero">
+            <h1>Déployez vos clusters<br><span>Kubernetes</span> en quelques clics</h1>
+            <p>Plateforme de gestion CAPI/CAPO sur OpenStack.<br>
+            Provisionnez, scalez et supervisez vos clusters clients depuis une interface unifiée.</p>
+        </div>
+        <div class="login-features">
+            <div class="login-feat"><div class="login-feat-dot"></div>Déploiement automatisé via Cluster API</div>
+            <div class="login-feat"><div class="login-feat-dot"></div>Multi-tenant avec isolation par namespace</div>
+            <div class="login-feat"><div class="login-feat-dot"></div>Installation automatique CCM + Cinder CSI</div>
+            <div class="login-feat"><div class="login-feat-dot"></div>Monitoring et audit en temps réel</div>
+        </div>
+    </div>
+    <div class="login-right">
+        <div class="login-form-title">Connexion</div>
+        <div class="login-form-sub">Accès réservé aux administrateurs Systalink</div>
+        <div class="login-field">
+            <label>Identifiant</label>
+            <input id="username" type="text" placeholder="votre.nom" autofocus />
+        </div>
+        <div class="login-field">
+            <label>Mot de passe</label>
+            <input id="password" type="password" placeholder="••••••••••" />
+        </div>
+        <button class="login-btn" id="login-btn" onclick="doLogin()">
+            Se connecter
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+        </button>
+        <div class="login-error" id="error"></div>
+        <hr class="login-divider">
+        <div class="login-footer">CAPI Platform v2 · <span>Systalink © 2026</span></div>
+    </div>
+</div>
+<script src="/static/app.js"></script>
+<script>
+    if (token()) window.location.href = '/dashboard';
+    document.getElementById('password').addEventListener('keydown', e => {
+        if (e.key === 'Enter') doLogin();
+    });
+    async function doLogin() {
+        const u   = document.getElementById('username').value.trim();
+        const p   = document.getElementById('password').value;
+        const btn = document.getElementById('login-btn');
+        const err = document.getElementById('error');
+        if (!u || !p) { err.textContent = 'Veuillez remplir tous les champs.'; return; }
+        btn.disabled = true;
+        btn.textContent = 'Connexion…';
+        err.textContent = '';
+        try {
+            const { access_token } = await api.login(u, p);
+            localStorage.setItem('token', access_token);
+            window.location.href = '/dashboard';
+        } catch {
+            err.textContent = 'Identifiants invalides.';
+            btn.disabled = false;
+            btn.innerHTML = 'Se connecter <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></svg>';
+        }
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,528 @@
+{% extends "base.html" %}
+{% block content %}
+
+<a href="/dashboard" class="back-link">← Retour aux clusters</a>
+
+<!-- Header -->
+<div class="row" style="margin-bottom:24px">
+    <div>
+        <h1>{{ cluster_name }}</h1>
+        <div style="font-size:13px;color:#64748b;margin-top:4px">Cluster Kubernetes géré via CAPI</div>
+    </div>
+    <button class="btn-outline" onclick="downloadKubeconfig()">↓ Kubeconfig</button>
+</div>
+
+<!-- Action cards -->
+<div class="action-grid">
+
+    <!-- Scale workers -->
+    <div class="card">
+        <div class="card-header">
+            <div>
+                <div class="card-title">Scale workers</div>
+                <div class="card-subtitle">Ajuster le nombre de nœuds workers</div>
+            </div>
+        </div>
+        <div class="scale-control">
+            <input id="scale-input" type="number" value="3" min="1" max="50" style="width:90px" />
+            <button class="btn btn-sm" onclick="scaleWorkers()">Appliquer</button>
+            <span id="scale-msg" style="font-size:13px;color:#16a34a"></span>
+        </div>
+    </div>
+
+    <!-- Upgrade K8s -->
+    <div class="card">
+        <div class="card-header">
+            <div>
+                <div class="card-title">Mise à jour Kubernetes</div>
+                <div class="card-subtitle">Mettre à jour la version K8s</div>
+            </div>
+        </div>
+        <div class="upgrade-panel">
+            <select id="upgrade-version" style="flex:1;min-width:140px"><option value="">Chargement…</option></select>
+            <button class="btn btn-sm" onclick="upgradeCluster()">Mettre à jour</button>
+            <span id="upgrade-msg" style="font-size:13px;color:#16a34a;width:100%"></span>
+        </div>
+    </div>
+
+    <!-- Cinder storage -->
+    <div class="card">
+        <div class="card-header">
+            <div>
+                <div class="card-title">Stockage Cinder</div>
+                <div class="card-subtitle">Vérifier et tester le CSI Cinder</div>
+            </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+            <button class="btn-outline btn-sm" id="ready-btn" onclick="checkReadiness()">Vérifier l'état</button>
+            <button class="btn-outline btn-sm" id="storage-btn" onclick="testStorage()">Tester le stockage</button>
+        </div>
+        <span id="storage-msg" style="font-size:13px;display:block;margin-bottom:6px"></span>
+        <div id="readiness-box" style="display:none;font-size:13px;padding:10px;background:#f8fafc;border-radius:7px;border:1px solid #e2e8f0">
+            <div id="readiness-checks"></div>
+        </div>
+        <div id="storage-result" style="display:none;margin-top:8px;padding:12px;border-radius:8px;font-size:13px;font-family:monospace"></div>
+    </div>
+
+</div>
+
+<!-- Machines -->
+<h2 class="section-title" id="machines-title">Machines</h2>
+<div class="card" style="padding:0;margin-bottom:24px">
+    <div class="table-wrap">
+        <table>
+            <thead><tr>
+                <th>Nom</th><th>Phase</th><th>Prêt</th><th>Flavor</th>
+            </tr></thead>
+            <tbody id="machines-body">
+                <tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:32px">Chargement…</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Events CAPI (bootstrap) -->
+<h2 class="section-title" id="events-title">Évènements bootstrap (CAPI)</h2>
+<div class="card events-table-wrap" style="padding:0">
+    <div class="table-wrap">
+        <table>
+            <thead><tr>
+                <th>Type</th><th>Raison</th><th>Message</th><th>Horodatage</th>
+            </tr></thead>
+            <tbody id="events-body">
+                <tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:32px">Chargement…</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Workload cluster logs -->
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin:24px 0 10px">
+    <h2 id="wl-events-title" style="font-size:14px;font-weight:600;color:#1e1b4b">Logs du cluster</h2>
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span style="font-size:12px;color:#7c75b8;margin-right:4px">Période :</span>
+        <button class="btn-outline btn-sm wl-preset active-preset" data-since="30">30 min</button>
+        <button class="btn-outline btn-sm wl-preset" data-since="60">1 h</button>
+        <button class="btn-outline btn-sm wl-preset" data-since="360">6 h</button>
+        <button class="btn-outline btn-sm wl-preset" data-since="1440">24 h</button>
+        <button class="btn-outline btn-sm wl-preset" data-since="10080">7 j</button>
+        <input id="wl-custom-since" type="number" min="1" placeholder="min" title="Personnalisé (minutes)"
+               style="width:72px;padding:4px 8px;font-size:12px;border-radius:6px;border:1px solid #ddd6fe">
+        <select id="wl-limit" style="width:80px;padding:4px 8px;font-size:12px;border-radius:6px;border:1px solid #ddd6fe">
+            <option value="100">100</option>
+            <option value="200" selected>200</option>
+            <option value="500">500</option>
+            <option value="1000">1000</option>
+        </select>
+        <button class="btn btn-sm" onclick="applyWlFilter()">↻ Actualiser</button>
+    </div>
+</div>
+<div class="card" style="padding:0;margin-bottom:24px">
+    <div class="table-wrap">
+        <table>
+            <thead><tr>
+                <th>NS</th><th>Type</th><th>Objet</th><th>Raison</th><th>Message</th><th>#</th><th>Horodatage</th>
+            </tr></thead>
+            <tbody id="wl-events-body">
+                <tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:32px">Chargement…</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ── Cluster Explorer ── -->
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin:24px 0 10px">
+    <h2 style="font-size:14px;font-weight:600;color:#1e1b4b">Explorateur de ressources</h2>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <label style="margin:0;font-size:12px;color:#7c75b8">Namespace :</label>
+        <select id="exp-ns" style="width:180px;padding:4px 8px;font-size:12px;border-radius:6px;border:1px solid #ddd6fe" onchange="expLoad()">
+            <option value="">Chargement…</option>
+        </select>
+        <button class="btn btn-sm" onclick="expLoad()">↻</button>
+    </div>
+</div>
+
+<div style="display:flex;gap:4px;margin-bottom:0;border-bottom:2px solid #ede9fe">
+    <button class="exp-tab active-tab" data-kind="pods"        onclick="expSetTab(this)">Pods</button>
+    <button class="exp-tab"            data-kind="deployments" onclick="expSetTab(this)">Deployments</button>
+    <button class="exp-tab"            data-kind="services"    onclick="expSetTab(this)">Services</button>
+    <button class="exp-tab"            data-kind="pvcs"        onclick="expSetTab(this)">PVCs</button>
+</div>
+
+<div class="card" style="padding:0;border-top:none;border-radius:0 0 12px 12px;margin-bottom:12px">
+    <div class="table-wrap">
+        <table id="exp-table">
+            <thead id="exp-thead"></thead>
+            <tbody id="exp-tbody">
+                <tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:32px">Sélectionnez un namespace</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Pod log viewer -->
+<div id="log-viewer" style="display:none;margin-bottom:32px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+        <h3 id="log-title" style="font-size:13px;font-weight:600;color:#1e1b4b"></h3>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <select id="log-container" style="padding:4px 8px;font-size:12px;border-radius:6px;border:1px solid #ddd6fe" onchange="fetchLogs()"></select>
+            <select id="log-lines" style="width:80px;padding:4px 8px;font-size:12px;border-radius:6px;border:1px solid #ddd6fe" onchange="fetchLogs()">
+                <option value="50">50</option>
+                <option value="100" selected>100</option>
+                <option value="300">300</option>
+                <option value="500">500</option>
+            </select>
+            <button class="btn btn-sm" onclick="fetchLogs()">↻ Rafraîchir</button>
+            <button class="btn-outline btn-sm" onclick="closeLogViewer()">✕ Fermer</button>
+        </div>
+    </div>
+    <div id="log-content" style="background:#0f0e26;color:#c4b5fd;font-family:monospace;font-size:12px;line-height:1.6;padding:16px;border-radius:10px;overflow-x:auto;white-space:pre;max-height:480px;overflow-y:auto">
+        Chargement…
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    if (!requireAuth()) {}
+    window._baseLoadNavUser();
+    const CLUSTER = "{{ cluster_name }}";
+
+    async function loadMachines() {
+        const machines = await api.getMachines(CLUSTER);
+        document.getElementById('machines-title').textContent = `Machines (${machines.length})`;
+        const tbody = document.getElementById('machines-body');
+        if (machines.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:32px">Aucune machine</td></tr>';
+            return;
+        }
+        tbody.innerHTML = machines.map(m => `
+            <tr>
+                <td style="font-weight:500">${m.name}</td>
+                <td>${badge(m.phase)}</td>
+                <td>${m.ready ? '<span style="color:#16a34a;font-weight:600">✓ Ready</span>' : '<span style="color:#94a3b8">—</span>'}</td>
+                <td><code style="font-size:12px;background:#f8fafc;padding:2px 6px;border-radius:4px">${m.flavor || '—'}</code></td>
+            </tr>
+        `).join('');
+    }
+
+    async function loadEvents() {
+        try {
+            const events = await api.getEvents(CLUSTER);
+            document.getElementById('events-title').textContent = `Évènements (${events.length})`;
+            const tbody = document.getElementById('events-body');
+            if (events.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:32px">Aucun évènement</td></tr>';
+                return;
+            }
+            tbody.innerHTML = events.map(e => {
+                const cls = e.type === 'Warning' ? 'badge-warning' : 'badge-normal';
+                const ts = e.timestamp ? new Date(e.timestamp).toLocaleString('fr-FR') : '—';
+                return `<tr>
+                    <td><span class="badge ${cls}">${e.type}</span></td>
+                    <td style="font-weight:500">${e.reason}</td>
+                    <td style="max-width:400px;word-break:break-word;color:#475569">${e.message}</td>
+                    <td style="white-space:nowrap;color:#94a3b8;font-size:12px">${ts}</td>
+                </tr>`;
+            }).join('');
+        } catch (err) {
+            document.getElementById('events-body').innerHTML =
+                `<tr><td colspan="4" style="text-align:center;color:#dc2626;padding:16px">${err}</td></tr>`;
+        }
+    }
+
+    async function checkReadiness() {
+        const btn = document.getElementById('ready-btn');
+        const box = document.getElementById('readiness-box');
+        const checksDiv = document.getElementById('readiness-checks');
+        btn.disabled = true;
+        btn.textContent = 'Vérification…';
+        box.style.display = 'block';
+        checksDiv.innerHTML = '<span style="color:#94a3b8">Interrogation du cluster…</span>';
+        try {
+            const r = await request('GET', `/clusters/${CLUSTER}/readiness`);
+            const icons = { true: '✓', false: '✗' };
+            const colors = { true: '#16a34a', false: '#dc2626' };
+            checksDiv.innerHTML = Object.entries(r.checks).map(([, c]) =>
+                `<div style="color:${colors[c.ok]};margin-bottom:4px">${icons[c.ok]} ${c.label}</div>`
+            ).join('');
+            if (r.ready) {
+                checksDiv.innerHTML += '<div style="margin-top:8px;font-weight:600;color:#16a34a">✓ Cluster prêt — vous pouvez tester le stockage</div>';
+            } else {
+                checksDiv.innerHTML += '<div style="margin-top:8px;color:#d97706">⚠ Cluster pas encore prêt — patientez et revérifiez</div>';
+            }
+        } catch (e) {
+            checksDiv.innerHTML = `<span style="color:#dc2626">Erreur: ${e}</span>`;
+        } finally {
+            btn.disabled = false;
+            btn.textContent = "Vérifier l'état";
+        }
+    }
+
+    async function testStorage() {
+        const btn = document.getElementById('storage-btn');
+        const msg = document.getElementById('storage-msg');
+        const box = document.getElementById('storage-result');
+        btn.disabled = true;
+        btn.textContent = 'Test en cours…';
+        msg.style.color = '#64748b';
+        msg.textContent = 'Vérification Cinder CSI + création PVC test (max 60s)…';
+        box.style.display = 'none';
+        try {
+            const r = await api.testStorage(CLUSTER);
+            msg.style.color = '#16a34a';
+            msg.textContent = '✓ Cinder CSI fonctionnel — volume créé et lié avec succès';
+            box.style.background = '#f0fdf4';
+            box.style.border = '1px solid #86efac';
+            box.style.display = 'block';
+            box.innerHTML = `<strong>✓ Stockage Cinder opérationnel</strong><br><br>StorageClass: ${r.storageClass}<br>Taille testée: ${r.size}<br>Statut PVC: <strong style="color:#16a34a">${r.status}</strong><br><br><em>PVC supprimé automatiquement.</em>`;
+        } catch (e) {
+            const detail = String(e).replace(/^Error:\s*/, '');
+            const is409 = String(e).includes('409');
+            msg.style.color = is409 ? '#d97706' : '#dc2626';
+            msg.textContent = (is409 ? '⚠ ' : '✗ ') + detail;
+            box.style.background = is409 ? '#fffbeb' : '#fef2f2';
+            box.style.border = `1px solid ${is409 ? '#fcd34d' : '#fca5a5'}`;
+            box.style.display = 'block';
+            box.innerHTML = `<strong>${is409 ? '⚠ Non disponible' : '✗ Erreur'}</strong><br><br>${detail}`;
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Tester le stockage';
+        }
+    }
+
+    async function downloadKubeconfig() {
+        const kc = await api.getKubeconfig(CLUSTER);
+        const a  = document.createElement('a');
+        a.href   = URL.createObjectURL(new Blob([kc], { type: 'text/yaml' }));
+        a.download = `${CLUSTER}-kubeconfig.yaml`;
+        a.click();
+    }
+
+    async function scaleWorkers() {
+        const n = parseInt(document.getElementById('scale-input').value);
+        if (!n || n < 1) return;
+        try {
+            await api.scaleCluster(CLUSTER, n);
+            const msg = document.getElementById('scale-msg');
+            msg.textContent = `✓ Scalé à ${n} workers`;
+            setTimeout(() => { msg.textContent = ''; }, 4000);
+        } catch (e) {
+            alert('Erreur scale: ' + e);
+        }
+    }
+
+    async function upgradeCluster() {
+        const ver = document.getElementById('upgrade-version').value;
+        if (!ver) return;
+        if (!confirm(`Mettre à jour vers ${ver} ?`)) return;
+        try {
+            await api.upgradeCluster(CLUSTER, ver);
+            const msg = document.getElementById('upgrade-msg');
+            msg.textContent = `✓ Mise à jour vers ${ver} lancée`;
+            setTimeout(() => { msg.textContent = ''; }, 5000);
+        } catch (e) {
+            alert('Erreur upgrade: ' + e);
+        }
+    }
+
+    async function loadVersions() {
+        const versions = await api.getVersions();
+        document.getElementById('upgrade-version').innerHTML =
+            '<option value="">-- version --</option>' +
+            versions.map(v => `<option value="${v}">${v}</option>`).join('');
+    }
+
+    let _wlSince = 30;
+    let _wlLimit = 200;
+
+    document.querySelectorAll('.wl-preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.wl-preset').forEach(b => b.classList.remove('active-preset'));
+            btn.classList.add('active-preset');
+            _wlSince = parseInt(btn.dataset.since);
+            document.getElementById('wl-custom-since').value = '';
+            loadWorkloadEvents();
+        });
+    });
+
+    function applyWlFilter() {
+        const custom = document.getElementById('wl-custom-since').value;
+        if (custom && parseInt(custom) > 0) {
+            document.querySelectorAll('.wl-preset').forEach(b => b.classList.remove('active-preset'));
+            _wlSince = parseInt(custom);
+        }
+        _wlLimit = parseInt(document.getElementById('wl-limit').value);
+        loadWorkloadEvents();
+    }
+
+    async function loadWorkloadEvents() {
+        const tbody = document.getElementById('wl-events-body');
+        const title = document.getElementById('wl-events-title');
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:20px">Chargement…</td></tr>';
+        try {
+            const events = await api.getWorkloadEvents(CLUSTER, _wlSince, _wlLimit);
+            const label = _wlSince >= 1440 ? `${_wlSince/1440}j` : _wlSince >= 60 ? `${_wlSince/60}h` : `${_wlSince}min`;
+            title.textContent = `Logs du cluster — ${events.length} événement(s) sur les derniers ${label}`;
+            if (events.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:32px">Aucun log sur cette période</td></tr>';
+                return;
+            }
+            tbody.innerHTML = events.map(e => {
+                const cls = e.type === 'Warning' ? 'badge-warning' : 'badge-normal';
+                const ts = e.timestamp ? new Date(e.timestamp).toLocaleString('fr-FR') : '—';
+                return `<tr>
+                    <td style="font-size:11px;color:#7c75b8;white-space:nowrap">${e.namespace}</td>
+                    <td><span class="badge ${cls}">${e.type}</span></td>
+                    <td style="font-size:11px;color:#475569;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${e.object}">${e.object}</td>
+                    <td style="font-weight:500;white-space:nowrap">${e.reason}</td>
+                    <td style="max-width:340px;word-break:break-word;color:#475569">${e.message}</td>
+                    <td style="text-align:center;color:#a5a3c2;font-size:12px">${e.count}</td>
+                    <td style="white-space:nowrap;color:#94a3b8;font-size:12px">${ts}</td>
+                </tr>`;
+            }).join('');
+        } catch (err) {
+            const detail = String(err);
+            const notReady = detail.includes('kubeconfig') || detail.includes('connect') || detail.includes('refused');
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:${notReady ? '#d97706' : '#dc2626'};padding:16px">${notReady ? '⚠ Cluster pas encore accessible' : detail}</td></tr>`;
+        }
+    }
+
+    function loadAll() { loadMachines(); loadEvents(); loadWorkloadEvents(); }
+
+    loadAll();
+    loadVersions();
+    setInterval(loadAll, 10000);
+
+    // ── Explorer ──
+    let _expKind = 'pods';
+    let _expPod  = null;
+
+    const EXP_HEADERS = {
+        pods:        ['Nom', 'Statut', 'Prêts', 'Restarts', 'Node', 'Age', ''],
+        deployments: ['Nom', 'Prêts', 'Age'],
+        services:    ['Nom', 'Type', 'Cluster IP', 'Ports', 'Age'],
+        pvcs:        ['Nom', 'Statut', 'Capacité', 'StorageClass', 'Age'],
+    };
+
+    function expAge(iso) {
+        if (!iso) return '—';
+        const diff = Date.now() - new Date(iso).getTime();
+        const m = Math.floor(diff / 60000);
+        if (m < 60)   return `${m}m`;
+        if (m < 1440) return `${Math.floor(m/60)}h`;
+        return `${Math.floor(m/1440)}j`;
+    }
+
+    function expSetTab(btn) {
+        document.querySelectorAll('.exp-tab').forEach(b => b.classList.remove('active-tab'));
+        btn.classList.add('active-tab');
+        _expKind = btn.dataset.kind;
+        closeLogViewer();
+        expLoad();
+    }
+
+    async function expLoadNamespaces() {
+        try {
+            const nsList = await api.getNamespaces(CLUSTER);
+            const sel = document.getElementById('exp-ns');
+            sel.innerHTML = nsList.map(n => `<option value="${n}">${n}</option>`).join('');
+            if (nsList.includes('kube-system')) sel.value = 'kube-system';
+            expLoad();
+        } catch(e) {
+            document.getElementById('exp-ns').innerHTML = '<option>Indisponible</option>';
+        }
+    }
+
+    async function expLoad() {
+        const ns = document.getElementById('exp-ns').value;
+        if (!ns) return;
+        const tbody = document.getElementById('exp-tbody');
+        const thead = document.getElementById('exp-thead');
+        tbody.innerHTML = `<tr><td colspan="${EXP_HEADERS[_expKind].length}" style="text-align:center;color:#94a3b8;padding:24px">Chargement…</td></tr>`;
+        thead.innerHTML = '<tr>' + EXP_HEADERS[_expKind].map(h => `<th>${h}</th>`).join('') + '</tr>';
+        try {
+            const items = await api.getResources(CLUSTER, ns, _expKind);
+            if (items.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="${EXP_HEADERS[_expKind].length}" style="text-align:center;color:#94a3b8;padding:24px">Aucune ressource</td></tr>`;
+                return;
+            }
+            if (_expKind === 'pods') {
+                tbody.innerHTML = items.map(p => {
+                    const phase = p.status;
+                    const cls = phase === 'Running' ? 'badge-ready' : phase === 'Pending' ? 'badge-provisioning' : 'badge-error';
+                    return `<tr>
+                        <td style="font-weight:500">${p.name}</td>
+                        <td><span class="badge ${cls}">${phase}</span></td>
+                        <td>${p.ready}</td>
+                        <td style="color:${p.restarts>0?'#d97706':'#94a3b8'}">${p.restarts}</td>
+                        <td style="font-size:11px;color:#7c75b8">${p.node}</td>
+                        <td style="font-size:11px;color:#94a3b8">${expAge(p.age)}</td>
+                        <td><button class="btn-outline btn-sm" onclick="openLogViewer('${ns}','${p.name}',${JSON.stringify(p.containers)})">Logs</button></td>
+                    </tr>`;
+                }).join('');
+            } else if (_expKind === 'deployments') {
+                tbody.innerHTML = items.map(d => `<tr>
+                    <td style="font-weight:500">${d.name}</td>
+                    <td>${d.ready}</td>
+                    <td style="font-size:11px;color:#94a3b8">${expAge(d.age)}</td>
+                </tr>`).join('');
+            } else if (_expKind === 'services') {
+                tbody.innerHTML = items.map(s => `<tr>
+                    <td style="font-weight:500">${s.name}</td>
+                    <td><span class="badge badge-default">${s.type}</span></td>
+                    <td style="font-size:12px;color:#475569">${s.cluster_ip}</td>
+                    <td style="font-size:12px;color:#475569">${s.ports}</td>
+                    <td style="font-size:11px;color:#94a3b8">${expAge(s.age)}</td>
+                </tr>`).join('');
+            } else if (_expKind === 'pvcs') {
+                tbody.innerHTML = items.map(pvc => {
+                    const cls = pvc.status === 'Bound' ? 'badge-ready' : pvc.status === 'Pending' ? 'badge-provisioning' : 'badge-error';
+                    return `<tr>
+                        <td style="font-weight:500">${pvc.name}</td>
+                        <td><span class="badge ${cls}">${pvc.status}</span></td>
+                        <td>${pvc.capacity}</td>
+                        <td style="font-size:12px;color:#475569">${pvc.storage_class}</td>
+                        <td style="font-size:11px;color:#94a3b8">${expAge(pvc.age)}</td>
+                    </tr>`;
+                }).join('');
+            }
+        } catch(e) {
+            tbody.innerHTML = `<tr><td colspan="${EXP_HEADERS[_expKind].length}" style="text-align:center;color:#dc2626;padding:16px">${e}</td></tr>`;
+        }
+    }
+
+    function openLogViewer(ns, pod, containers) {
+        _expPod = { ns, pod, containers };
+        document.getElementById('log-viewer').style.display = 'block';
+        document.getElementById('log-title').textContent = `Logs : ${pod}`;
+        const sel = document.getElementById('log-container');
+        sel.innerHTML = containers.map(c => `<option value="${c}">${c}</option>`).join('');
+        fetchLogs();
+        document.getElementById('log-viewer').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function closeLogViewer() {
+        document.getElementById('log-viewer').style.display = 'none';
+        _expPod = null;
+    }
+
+    async function fetchLogs() {
+        if (!_expPod) return;
+        const ctr   = document.getElementById('log-container').value;
+        const lines = document.getElementById('log-lines').value;
+        const box   = document.getElementById('log-content');
+        box.textContent = 'Chargement…';
+        try {
+            const text = await api.getPodLogs(CLUSTER, _expPod.ns, _expPod.pod, ctr, lines);
+            box.textContent = text || '(aucun log)';
+            box.scrollTop = box.scrollHeight;
+        } catch(e) {
+            box.textContent = 'Erreur : ' + e;
+        }
+    }
+
+    expLoadNamespaces();
+</script>
+{% endblock %}

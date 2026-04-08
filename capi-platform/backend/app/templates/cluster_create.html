@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block content %}
+
+<a href="/dashboard" class="back-link">← Retour aux clusters</a>
+<div class="row" style="margin-bottom:24px">
+    <div>
+        <h1>Nouveau cluster</h1>
+        <div style="font-size:13px;color:#64748b;margin-top:4px">Déploiement via Cluster API sur OpenStack</div>
+    </div>
+</div>
+
+<div style="max-width:600px">
+
+    <!-- Template selector -->
+    <div class="card" style="margin-bottom:16px">
+        <div class="card-header" style="margin-bottom:12px">
+            <div>
+                <div class="card-title">Charger depuis un template</div>
+                <div class="card-subtitle">Pré-remplir les champs depuis un template existant</div>
+            </div>
+        </div>
+        <select id="template-select" onchange="applyTemplate()">
+            <option value="">-- aucun template --</option>
+        </select>
+    </div>
+
+    <!-- Cluster configuration -->
+    <div class="card">
+        <div class="card-title" style="margin-bottom:4px">Configuration du cluster</div>
+        <div class="card-subtitle" style="margin-bottom:4px">Définissez les ressources et la version Kubernetes</div>
+        <hr class="divider">
+
+        <label>Nom du cluster</label>
+        <input id="name" placeholder="ex: client-prod (minuscules, tirets autorisés)" />
+
+        <label>Version Kubernetes</label>
+        <select id="k8s_version"><option value="">Chargement…</option></select>
+
+        <div class="form-grid-2" style="margin-top:0">
+            <div>
+                <label>Flavor control plane</label>
+                <select id="cp_flavor"><option value="">Chargement…</option></select>
+            </div>
+            <div>
+                <label>Flavor workers</label>
+                <select id="worker_flavor"><option value="">Chargement…</option></select>
+            </div>
+        </div>
+
+        <label>Nombre de workers</label>
+        <input id="worker_count" type="number" value="3" min="1" max="20" style="max-width:140px" />
+
+        <div class="error" id="error"></div>
+
+        <div style="display:flex;gap:10px;margin-top:24px;flex-wrap:wrap">
+            <a href="/dashboard" class="btn-outline" style="flex:1;text-align:center;padding:9px;min-width:120px">Annuler</a>
+            <button class="btn-outline" style="flex:1;min-width:160px" onclick="saveAsTemplate()">↗ Sauver comme template</button>
+            <button class="btn" style="flex:1;min-width:160px" id="submit-btn" onclick="submit()">+ Créer le cluster</button>
+        </div>
+        <div id="tpl-msg" style="font-size:13px;color:#16a34a;margin-top:10px"></div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    if (!requireAuth()) {}
+    window._baseLoadNavUser();
+
+    let _templates = [];
+
+    async function loadOptions() {
+        const [versions, flavors, tpls] = await Promise.all([
+            api.getVersions(), api.getFlavors(), api.listTemplates()
+        ]);
+        _templates = tpls;
+        document.getElementById('k8s_version').innerHTML =
+            '<option value="">-- choisir --</option>' + versions.map(v => `<option>${v}</option>`).join('');
+        const opts = '<option value="">-- choisir --</option>' + flavors.map(f => `<option>${f}</option>`).join('');
+        document.getElementById('cp_flavor').innerHTML     = opts;
+        document.getElementById('worker_flavor').innerHTML = opts;
+        document.getElementById('template-select').innerHTML =
+            '<option value="">-- aucun template --</option>' +
+            tpls.map(t => `<option value="${t.id}">${t.name}${t.description ? ' — ' + t.description : ''}</option>`).join('');
+    }
+
+    function applyTemplate() {
+        const id = document.getElementById('template-select').value;
+        if (!id) return;
+        const tpl = _templates.find(t => t.id == id);
+        if (!tpl) return;
+        document.getElementById('k8s_version').value   = tpl.k8s_version;
+        document.getElementById('cp_flavor').value     = tpl.cp_flavor;
+        document.getElementById('worker_flavor').value = tpl.worker_flavor;
+        document.getElementById('worker_count').value  = tpl.worker_count;
+    }
+
+    async function saveAsTemplate() {
+        const name = prompt('Nom du template ?');
+        if (!name) return;
+        const desc = prompt('Description (optionnel)') || '';
+        try {
+            await api.createTemplate({
+                name,
+                k8s_version:   document.getElementById('k8s_version').value,
+                cp_flavor:     document.getElementById('cp_flavor').value,
+                worker_flavor: document.getElementById('worker_flavor').value,
+                worker_count:  parseInt(document.getElementById('worker_count').value),
+                description:   desc,
+            });
+            const msg = document.getElementById('tpl-msg');
+            msg.textContent = `✓ Template "${name}" sauvegardé !`;
+            setTimeout(() => { msg.textContent = ''; }, 4000);
+            await loadOptions();
+        } catch (e) {
+            document.getElementById('error').textContent = 'Erreur template: ' + e;
+        }
+    }
+
+    async function submit() {
+        const name        = document.getElementById('name').value.trim();
+        const k8s_version = document.getElementById('k8s_version').value;
+        const cp_flavor   = document.getElementById('cp_flavor').value;
+        const wk_flavor   = document.getElementById('worker_flavor').value;
+        const errEl = document.getElementById('error');
+
+        if (!name)        { errEl.textContent = 'Le nom du cluster est requis.'; return; }
+        if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(name)) {
+            errEl.textContent = 'Nom invalide : minuscules, chiffres et tirets uniquement (ex: mon-cluster).'; return;
+        }
+        if (!k8s_version) { errEl.textContent = 'Choisissez une version Kubernetes.'; return; }
+        if (!cp_flavor)   { errEl.textContent = 'Choisissez un flavor control plane.'; return; }
+        if (!wk_flavor)   { errEl.textContent = 'Choisissez un flavor workers.'; return; }
+        errEl.textContent = '';
+
+        const btn = document.getElementById('submit-btn');
+        btn.disabled = true;
+        btn.textContent = 'Création en cours…';
+        try {
+            await api.createCluster({
+                name, k8s_version, cp_flavor,
+                worker_flavor: wk_flavor,
+                worker_count:  parseInt(document.getElementById('worker_count').value),
+            });
+            window.location.href = '/dashboard';
+        } catch (e) {
+            document.getElementById('error').textContent = String(e);
+            btn.disabled = false;
+            btn.textContent = '+ Créer le cluster';
+        }
+    }
+
+    loadOptions();
+</script>
+{% endblock %}

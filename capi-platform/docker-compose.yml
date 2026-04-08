@@ -1,0 +1,35 @@
+name: capi-platform-dev
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: capi
+      POSTGRES_PASSWORD: capi
+      POSTGRES_DB: capidb
+    volumes:
+      - pgdata-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U capi -d capidb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    ports:
+      - "8001:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://capi:capi@postgres:5432/capidb
+      SECRET_KEY: dev-secret-key
+      OS_CLOUDS_YAML: /app/config/clouds.yaml
+      OS_EXTERNAL_NETWORK_ID: e6ab9d94-38f5-4815-b43d-0ece9dc5bc0d
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ~/.kube/config:/root/.kube/config:ro
+      - ./backend/config/clouds.yaml:/app/config/clouds.yaml:ro
+      - /usr/local/bin/kubectl:/usr/local/bin/kubectl:ro
+
+volumes:
+  pgdata-dev:

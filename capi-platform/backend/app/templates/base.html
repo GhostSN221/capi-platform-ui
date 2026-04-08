@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CAPI Platform</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar">
+        <div class="sidebar-logo">
+            <div class="logo-mark">⎈</div>
+            CAPI Platform
+        </div>
+        <nav class="sidebar-nav">
+            <span class="sidebar-section">Navigation</span>
+            <a href="/dashboard" class="nav-link"><span class="nav-icon">▦</span> Clusters</a>
+            <a href="/cluster-templates" class="nav-link"><span class="nav-icon">◈</span> Templates</a>
+            <span class="sidebar-section nav-admin" style="display:none">Administration</span>
+            <a href="/admin" class="nav-link nav-admin" style="display:none"><span class="nav-icon">⚙</span> Admin</a>
+            <a href="/audit" class="nav-link nav-admin" style="display:none"><span class="nav-icon">☰</span> Audit</a>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="sidebar-user">
+                <div class="user-avatar" id="user-avatar">?</div>
+                <span id="nav-user">—</span>
+            </div>
+            <button class="btn-logout" onclick="logout()">Quitter</button>
+        </div>
+    </aside>
+    <div class="main-content">
+        <div class="container">
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+</div>
+<script src="/static/app.js?v={{ asset_v }}"></script>
+<script>
+    document.querySelectorAll('.nav-link').forEach(a => {
+        if (a.getAttribute('href') === window.location.pathname) a.classList.add('active');
+    });
+    const origLoadNavUser = loadNavUser;
+    window._baseLoadNavUser = async function(opts) {
+        await origLoadNavUser(opts);
+        const u = document.getElementById('nav-user');
+        const av = document.getElementById('user-avatar');
+        if (u && av && u.textContent && u.textContent !== '—') {
+            av.textContent = u.textContent.charAt(0).toUpperCase();
+        }
+    };
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 style="margin-bottom:24px">Administration</h1>
+
+<div class="admin-grid">
+
+    <!-- Tenants -->
+    <div>
+        <div class="row" style="margin-bottom:12px">
+            <h2>Tenants</h2>
+        </div>
+        <div class="card" style="padding:0;margin-bottom:24px">
+            <table>
+                <thead><tr>
+                    <th>ID</th><th>Nom</th><th>Namespace</th><th>Cloud</th>
+                </tr></thead>
+                <tbody id="tenants-body">
+                    <tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:24px">Chargement…</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Create tenant form -->
+        <div class="card">
+            <h2 style="margin-bottom:16px">Nouveau tenant</h2>
+            <label>Nom du tenant</label>
+            <input id="t-name" placeholder="ex: client-acme" />
+            <label>Namespace Kubernetes</label>
+            <input id="t-namespace" placeholder="ex: acme-ns" />
+            <label>Cloud OpenStack (os_cloud)</label>
+            <input id="t-cloud" placeholder="ex: openstack" />
+            <div class="error" id="t-error"></div>
+            <button class="btn" style="margin-top:16px;width:100%" onclick="createTenant()">Créer le tenant</button>
+        </div>
+    </div>
+
+    <!-- Users -->
+    <div>
+        <div class="row" style="margin-bottom:12px">
+            <h2>Utilisateurs</h2>
+        </div>
+        <div class="card" style="padding:0">
+            <table>
+                <thead><tr>
+                    <th>Utilisateur</th><th>Admin</th><th>Tenant actuel</th><th>Assigner</th>
+                </tr></thead>
+                <tbody id="users-body">
+                    <tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:24px">Chargement…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    if (!requireAuth()) {}
+    loadNavUser();
+
+    let _tenants = [];
+
+    async function loadTenants() {
+        _tenants = await api.listTenants();
+        const tbody = document.getElementById('tenants-body');
+        if (_tenants.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:24px">Aucun tenant</td></tr>';
+            return;
+        }
+        tbody.innerHTML = _tenants.map(t => `
+            <tr>
+                <td>${t.id}</td>
+                <td style="font-weight:500">${t.name}</td>
+                <td><code>${t.namespace}</code></td>
+                <td>${t.os_cloud}</td>
+            </tr>
+        `).join('');
+    }
+
+    async function loadUsers() {
+        const users = await api.listUsers();
+        const tbody = document.getElementById('users-body');
+        if (users.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:24px">Aucun utilisateur</td></tr>';
+            return;
+        }
+        const tenantOpts = '<option value="">-- aucun --</option>' +
+            _tenants.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+        tbody.innerHTML = users.map(u => `
+            <tr>
+                <td>${u.username}<br/><span style="font-size:12px;color:#94a3b8">${u.email}</span></td>
+                <td>${u.is_admin ? '<span class="badge badge-ready">Admin</span>' : '—'}</td>
+                <td>${u.tenant_name || '—'}</td>
+                <td>
+                    <div style="display:flex;gap:6px;align-items:center">
+                        <select id="assign-${u.id}" style="width:auto;font-size:13px;padding:4px 8px">${tenantOpts}</select>
+                        <button class="btn" style="padding:4px 10px;font-size:13px" onclick="assignTenant(${u.id})">OK</button>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+        // pre-select current tenant
+        users.forEach(u => {
+            if (u.tenant_id) {
+                const sel = document.getElementById(`assign-${u.id}`);
+                if (sel) sel.value = String(u.tenant_id);
+            }
+        });
+    }
+
+    async function createTenant() {
+        const name      = document.getElementById('t-name').value.trim();
+        const namespace = document.getElementById('t-namespace').value.trim();
+        const os_cloud  = document.getElementById('t-cloud').value.trim();
+        const errEl     = document.getElementById('t-error');
+        errEl.textContent = '';
+        if (!name || !namespace || !os_cloud) {
+            errEl.textContent = 'Tous les champs sont requis';
+            return;
+        }
+        try {
+            await api.listTenants();  // verify admin access
+            const res = await fetch('/api/tenants/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + localStorage.getItem('token') },
+                body: JSON.stringify({ name, namespace, os_cloud }),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            document.getElementById('t-name').value = '';
+            document.getElementById('t-namespace').value = '';
+            document.getElementById('t-cloud').value = '';
+            await loadTenants();
+            await loadUsers();
+        } catch (e) {
+            errEl.textContent = String(e);
+        }
+    }
+
+    async function assignTenant(userId) {
+        const sel = document.getElementById(`assign-${userId}`);
+        const tenantId = parseInt(sel.value);
+        if (!tenantId) return;
+        try {
+            await api.assignTenant(tenantId, userId);
+            await loadUsers();
+        } catch (e) {
+            alert('Erreur: ' + e);
+        }
+    }
+
+    async function init() {
+        await loadTenants();
+        await loadUsers();
+    }
+
+    init();
+</script>
+{% endblock %}
