@@ -8,17 +8,6 @@ So I built this.
 
 ---
 
-## Screenshots
-
-<table>
-  <tr>
-    <td><img src="docs/screenshots/login.png" alt="Login" width="100%"/></td>
-    <td><img src="docs/screenshots/dashboard.png" alt="Dashboard" width="100%"/></td>
-  </tr>
-</table>
-
----
-
 ## What it does
 
 A web UI that takes a form input and provisions a full Kubernetes cluster via CAPI/CAPO on OpenStack — no YAML required.
@@ -123,4 +112,3 @@ Issues and PRs are welcome.
 ## License
 
 Apache 2.0
-
