@@ -1,8 +1,65 @@
+# ── Secrets & credentials ──────────────────────────────────────────
+.env
+.env.*
+*.env
+
+# OpenStack
+clouds.yaml
+cloud.conf
+*-clouds.yaml
+openrc
+openrc.*
+
+# Kubernetes
+kubeconfig
+*.kubeconfig
+kube-config
+backend/config/
+current-state.yaml
+
+# Certificats & clés
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+
+# ── Python ──────────────────────────────────────────────────────────
 __pycache__/
 *.pyc
 *.pyo
-.env
+*.pyd
+.Python
 *.egg-info/
+dist/
+build/
 .venv/
-backend/config/
-current-state.yaml
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+
+# ── Node / Frontend ─────────────────────────────────────────────────
+node_modules/
+dist/
+.npm
+
+# ── Docker ──────────────────────────────────────────────────────────
+docker-compose.override.yml
+docker-compose.prod.yml
+
+# ── DB & data ───────────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+pgdata/
+
+# ── OS & IDE ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
