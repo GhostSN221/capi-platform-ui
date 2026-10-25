@@ -11,6 +11,7 @@ class ClusterTemplate(Base):
     k8s_version:    Mapped[str]      = mapped_column(String(16))
     cp_flavor:      Mapped[str]      = mapped_column(String(64))
     worker_flavor:  Mapped[str]      = mapped_column(String(64))
+    master_count:   Mapped[int]      = mapped_column(Integer, server_default="1", default=1)
     worker_count:   Mapped[int]      = mapped_column(Integer, default=3)
     description:    Mapped[str]      = mapped_column(Text, default="")
     created_by:     Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)

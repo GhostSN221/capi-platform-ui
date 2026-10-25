@@ -24,6 +24,20 @@ spec:
                 name: capi-platform-config
             - secretRef:
                 name: capi-platform-secret
+          env:
+            # Réseau des clusters créés (ne JAMAIS utiliser 192.x.x.x)
+            - name: POD_CIDR
+              value: "100.64.0.0/16"
+            - name: SERVICE_CIDR
+              value: "10.96.0.0/12"
+            # Calico : VXLAN encapsulé (IPIP interdit par l'anti-spoofing OpenStack)
+            - name: CALICO_IPIP_MODE
+              value: "Never"
+            - name: CALICO_VXLAN_MODE
+              value: "Always"
+            # 0 = auto (MTU underlay - 50 en VXLAN)
+            - name: CALICO_MTU
+              value: "0"
           livenessProbe:
             httpGet:
               path: /healthz

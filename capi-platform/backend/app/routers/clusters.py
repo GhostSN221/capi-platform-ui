@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,10 +10,44 @@ from app.services.auth import get_current_user
 from app.services import capi
 from app.services.audit import log_action
 from app.services.post_install import schedule_post_install, TenantInfo
+from app.services.force_delete import watch_and_force_delete
 from app.models.cluster import Cluster
+from app.config import settings
+from app.services import network
 from datetime import datetime
+import ipaddress
+import threading
+import os, yaml
 
 router = APIRouter()
+
+# Sérialise "vérification du CIDR + création" pour éviter que deux créations
+# simultanées prennent le même /24 avant que le subnet Neutron n'existe.
+_CLUSTER_CREATE_LOCK = threading.Lock()
+
+
+def _validate_cluster_networks(pod_cidr: str, service_cidr: str) -> None:
+    """Refuse un pod CIDR dans une plage interdite (dont tout 192.x.x.x)."""
+    try:
+        pod = ipaddress.ip_network(pod_cidr, strict=False)
+        svc = ipaddress.ip_network(service_cidr, strict=False)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"CIDR invalide: {exc}")
+
+    for net in network.FORBIDDEN_NETWORKS:
+        if pod.overlaps(net):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"pod_cidr {pod_cidr} chevauche la plage interdite {net}. "
+                    "Utiliser 100.64.0.0/16 (ou une autre plage dédiée hors 192.x)."
+                ),
+            )
+    if pod.overlaps(svc):
+        raise HTTPException(
+            status_code=400,
+            detail=f"pod_cidr {pod_cidr} chevauche service_cidr {service_cidr}",
+        )
 
 
 class ScaleRequest(BaseModel):
@@ -70,38 +104,69 @@ async def list_clusters(user: User = Depends(get_current_user), db: AsyncSession
     return result
 
 
+def _load_clouds_yaml() -> tuple[str, str]:
+    """Load clouds.yaml from server and return (content, os_cloud_name)."""
+    path = os.getenv("OS_CLOUDS_YAML", "")
+    if path and os.path.exists(path):
+        with open(path) as f:
+            content = f.read()
+        os_cloud = list(yaml.safe_load(content).get("clouds", {}).keys())[0]
+        return content, os_cloud
+    raise HTTPException(500, "OS_CLOUDS_YAML non défini ou introuvable sur le serveur")
+
+
 @router.post("/", response_model=ClusterOut)
 async def create_cluster(body: ClusterCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     tenant = await resolve_tenant(user, db)
-    # Ensure the openstack cloud secret exists in the namespace before creating the cluster
-    if tenant.clouds_yaml:
-        capi.ensure_cloud_secret(tenant.namespace, tenant.os_cloud, tenant.clouds_yaml)
-    params = {
-        "cluster_name":   body.name,
-        "namespace":      tenant.namespace,
-        "k8s_version":    body.k8s_version,
-        "cp_flavor":      body.cp_flavor,
-        "worker_flavor":  body.worker_flavor,
-        "worker_count":   body.worker_count,
-        "os_cloud":             tenant.os_cloud,
-        "external_network_id":  tenant.external_network_id,
-    }
-    capi.create_cluster(tenant.namespace, params)
 
-    # Schedule background post-install (CCM + Cinder CSI) once the cluster is ready
-    if tenant.clouds_yaml:
-        tenant_info = TenantInfo(
-            namespace=tenant.namespace,
-            os_cloud=tenant.os_cloud,
-            external_network_id=tenant.external_network_id or "",
-            clouds_yaml=tenant.clouds_yaml,
-        )
-        schedule_post_install(body.name, tenant_info)
+    # Refuse un CIDR qui chevauche l'on-prem (cf. incident datacloud-platform)
+    _validate_cluster_networks(settings.pod_cidr, settings.service_cidr)
+
+    # Toujours charger le clouds.yaml depuis le fichier serveur (source unique de vérité)
+    clouds_yaml, os_cloud = _load_clouds_yaml()
+
+    # Créer le secret OpenStack dans le namespace du tenant (idempotent)
+    capi.ensure_cloud_secret(tenant.namespace, os_cloud, clouds_yaml)
+
+    # --- Contrôle serveur du CIDR nœuds : overlap réel + plages interdites ---
+    with _CLUSTER_CREATE_LOCK:
+        node_cidr = (body.node_cidr or "").strip() or network.suggest_cidr()
+        check = network.check_cidr(node_cidr)
+        if not check.get("available"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"node_cidr {node_cidr} refusé : {check.get('reason')}",
+            )
+
+        params = {
+            "cluster_name":   body.name,
+            "namespace":      tenant.namespace,
+            "k8s_version":    body.k8s_version,
+            "cp_flavor":      body.cp_flavor,
+            "worker_flavor":  body.worker_flavor,
+            "master_count":   body.master_count,
+            "worker_count":   body.worker_count,
+            "node_cidr":      node_cidr,
+            "os_cloud":       os_cloud,
+            "pod_cidr":       settings.pod_cidr,
+            "service_cidr":   settings.service_cidr,
+        }
+        capi.create_cluster(tenant.namespace, params)
+
+    # Schedule background post-install (CCM + Cinder CSI)
+    tenant_info = TenantInfo(
+        namespace=tenant.namespace,
+        os_cloud=os_cloud,
+        external_network_id=os.getenv("OS_EXTERNAL_NETWORK_ID", tenant.external_network_id or ""),
+        clouds_yaml=clouds_yaml,
+    )
+    schedule_post_install(body.name, tenant_info)
 
     c = Cluster(
         name=body.name, tenant_id=tenant.id, k8s_version=body.k8s_version,
         cp_flavor=body.cp_flavor, worker_flavor=body.worker_flavor,
-        worker_count=body.worker_count, status="Provisioning"
+        master_count=body.master_count, worker_count=body.worker_count,
+        status="Provisioning"
     )
     db.add(c)
     await db.commit()
@@ -112,9 +177,15 @@ async def create_cluster(body: ClusterCreate, user: User = Depends(get_current_u
 
 
 @router.delete("/{name}")
-async def delete_cluster(name: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def delete_cluster(name: str, background_tasks: BackgroundTasks, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     tenant = await resolve_tenant(user, db)
-    capi.delete_cluster(tenant.namespace, name)
+    try:
+        capi.delete_cluster(tenant.namespace, name)
+        background_tasks.add_task(watch_and_force_delete, tenant.namespace, name)
+    except Exception as exc:
+        # If the cluster is already gone from k8s (404), still clean up the DB
+        if "404" not in str(exc) and "Not Found" not in str(exc):
+            raise
     from sqlalchemy import delete as sq_delete
     await db.execute(sq_delete(Cluster).where(Cluster.name == name, Cluster.tenant_id == tenant.id))
     await db.commit()
@@ -149,7 +220,14 @@ async def workload_events(
     db: AsyncSession = Depends(get_db)
 ):
     tenant = await resolve_tenant(user, db)
-    return capi.get_workload_events(tenant.namespace, name, since_minutes=since, limit=limit)
+    try:
+        return capi.get_workload_events(tenant.namespace, name, since_minutes=since, limit=limit)
+    except Exception as exc:
+        msg = str(exc)
+        if any(k in msg for k in ("No route to host", "Connection refused", "timed out", "kubeconfig")):
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=503, content={"detail": "cluster_unreachable", "message": msg[:200]})
+        raise
 
 
 @router.get("/{name}/namespaces")

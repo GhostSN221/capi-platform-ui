@@ -7,6 +7,7 @@ class ClusterTemplateCreate(BaseModel):
     k8s_version: str
     cp_flavor: str
     worker_flavor: str
+    master_count: int = 1
     worker_count: int = 3
     description: str = ""
 
@@ -17,6 +18,7 @@ class ClusterTemplateOut(BaseModel):
     k8s_version: str
     cp_flavor: str
     worker_flavor: str
+    master_count: int
     worker_count: int
     description: str
     created_by: int | None

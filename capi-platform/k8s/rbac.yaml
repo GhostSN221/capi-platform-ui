@@ -10,17 +10,19 @@ metadata:
   name: capi-platform-role
 rules:
   - apiGroups: ["cluster.x-k8s.io","infrastructure.cluster.x-k8s.io",
-                "bootstrap.cluster.x-k8s.io","controlplane.cluster.x-k8s.io"]
+                "bootstrap.cluster.x-k8s.io","controlplane.cluster.x-k8s.io",
+                "ipam.cluster.x-k8s.io"]
     resources: ["*"]
     verbs: ["get","list","watch","create","update","patch","delete"]
   - apiGroups: [""]
     resources: ["namespaces"]
     verbs: ["get","list","watch","create"]
+  # secrets : lecture (kubeconfig) + écriture (secret clouds.yaml par tenant)
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["get","list","watch"]
+    verbs: ["get","list","watch","create","update","patch","delete"]
   - apiGroups: [""]
-    resources: ["events"]
+    resources: ["events","nodes","pods"]
     verbs: ["get","list","watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
