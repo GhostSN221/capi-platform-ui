@@ -81,40 +81,18 @@
     </div>
 </div>
 
-<!-- Events CAPI (bootstrap) -->
-<h2 class="section-title" id="events-title">Évènements bootstrap (CAPI)</h2>
-<div class="card events-table-wrap" style="padding:0">
-    <div class="table-wrap">
-        <table>
-            <thead><tr>
-                <th>Type</th><th>Raison</th><th>Message</th><th>Horodatage</th>
-            </tr></thead>
-            <tbody id="events-body">
-                <tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:32px">Chargement…</td></tr>
-            </tbody>
-        </table>
-    </div>
-</div>
-
 <!-- Workload cluster logs -->
 <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin:24px 0 10px">
     <h2 id="wl-events-title" style="font-size:14px;font-weight:600;color:#1e1b4b">Logs du cluster</h2>
     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-        <span style="font-size:12px;color:#7c75b8;margin-right:4px">Période :</span>
+        <select id="wl-ns-filter" style="padding:4px 10px;font-size:12px;border-radius:6px;border:1px solid #ddd6fe;color:#1e1b4b" onchange="renderWlEvents()">
+            <option value="">Tous les namespaces</option>
+        </select>
         <button class="btn-outline btn-sm wl-preset active-preset" data-since="30">30 min</button>
         <button class="btn-outline btn-sm wl-preset" data-since="60">1 h</button>
         <button class="btn-outline btn-sm wl-preset" data-since="360">6 h</button>
         <button class="btn-outline btn-sm wl-preset" data-since="1440">24 h</button>
-        <button class="btn-outline btn-sm wl-preset" data-since="10080">7 j</button>
-        <input id="wl-custom-since" type="number" min="1" placeholder="min" title="Personnalisé (minutes)"
-               style="width:72px;padding:4px 8px;font-size:12px;border-radius:6px;border:1px solid #ddd6fe">
-        <select id="wl-limit" style="width:80px;padding:4px 8px;font-size:12px;border-radius:6px;border:1px solid #ddd6fe">
-            <option value="100">100</option>
-            <option value="200" selected>200</option>
-            <option value="500">500</option>
-            <option value="1000">1000</option>
-        </select>
-        <button class="btn btn-sm" onclick="applyWlFilter()">↻ Actualiser</button>
+        <button class="btn btn-sm" onclick="loadWorkloadEvents()">↻</button>
     </div>
 </div>
 <div class="card" style="padding:0;margin-bottom:24px">
@@ -205,31 +183,6 @@
                 <td><code style="font-size:12px;background:#f8fafc;padding:2px 6px;border-radius:4px">${m.flavor || '—'}</code></td>
             </tr>
         `).join('');
-    }
-
-    async function loadEvents() {
-        try {
-            const events = await api.getEvents(CLUSTER);
-            document.getElementById('events-title').textContent = `Évènements (${events.length})`;
-            const tbody = document.getElementById('events-body');
-            if (events.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:32px">Aucun évènement</td></tr>';
-                return;
-            }
-            tbody.innerHTML = events.map(e => {
-                const cls = e.type === 'Warning' ? 'badge-warning' : 'badge-normal';
-                const ts = e.timestamp ? new Date(e.timestamp).toLocaleString('fr-FR') : '—';
-                return `<tr>
-                    <td><span class="badge ${cls}">${e.type}</span></td>
-                    <td style="font-weight:500">${e.reason}</td>
-                    <td style="max-width:400px;word-break:break-word;color:#475569">${e.message}</td>
-                    <td style="white-space:nowrap;color:#94a3b8;font-size:12px">${ts}</td>
-                </tr>`;
-            }).join('');
-        } catch (err) {
-            document.getElementById('events-body').innerHTML =
-                `<tr><td colspan="4" style="text-align:center;color:#dc2626;padding:16px">${err}</td></tr>`;
-        }
     }
 
     async function checkReadiness() {
@@ -335,61 +288,76 @@
     }
 
     let _wlSince = 30;
-    let _wlLimit = 200;
+    let _wlAllEvents = [];
 
     document.querySelectorAll('.wl-preset').forEach(btn => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('.wl-preset').forEach(b => b.classList.remove('active-preset'));
             btn.classList.add('active-preset');
             _wlSince = parseInt(btn.dataset.since);
-            document.getElementById('wl-custom-since').value = '';
             loadWorkloadEvents();
         });
     });
 
-    function applyWlFilter() {
-        const custom = document.getElementById('wl-custom-since').value;
-        if (custom && parseInt(custom) > 0) {
-            document.querySelectorAll('.wl-preset').forEach(b => b.classList.remove('active-preset'));
-            _wlSince = parseInt(custom);
-        }
-        _wlLimit = parseInt(document.getElementById('wl-limit').value);
-        loadWorkloadEvents();
-    }
-
-    async function loadWorkloadEvents() {
+    function renderWlEvents() {
+        const ns = document.getElementById('wl-ns-filter').value;
+        const filtered = ns ? _wlAllEvents.filter(e => e.namespace === ns) : _wlAllEvents;
         const tbody = document.getElementById('wl-events-body');
         const title = document.getElementById('wl-events-title');
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:20px">Chargement…</td></tr>';
+        const label = _wlSince >= 1440 ? `${_wlSince/1440}j` : _wlSince >= 60 ? `${_wlSince/60}h` : `${_wlSince}min`;
+        title.textContent = `Logs du cluster — ${filtered.length} événement(s) sur les derniers ${label}${ns ? ` · ${ns}` : ''}`;
+        if (filtered.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#16a34a;padding:32px">✓ Cluster stable — aucun événement récent</td></tr>';
+            return;
+        }
+        tbody.innerHTML = filtered.map(e => {
+            const cls = e.type === 'Warning' ? 'badge-warning' : 'badge-normal';
+            const ts = e.timestamp ? new Date(e.timestamp).toLocaleString('fr-FR') : '—';
+            return `<tr>
+                <td style="font-size:11px;color:#7c75b8;white-space:nowrap">${e.namespace}</td>
+                <td><span class="badge ${cls}">${e.type}</span></td>
+                <td style="font-size:11px;color:#475569;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${e.object}">${e.object}</td>
+                <td style="font-weight:500;white-space:nowrap">${e.reason}</td>
+                <td style="max-width:340px;word-break:break-word;color:#475569">${e.message}</td>
+                <td style="text-align:center;color:#a5a3c2;font-size:12px">${e.count}</td>
+                <td style="white-space:nowrap;color:#94a3b8;font-size:12px">${ts}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    let _wlLoading = false;
+
+    async function loadWorkloadEvents() {
+        if (_wlLoading) return;           // skip concurrent calls
+        _wlLoading = true;
+        const tbody = document.getElementById('wl-events-body');
+        // Show spinner only on very first load (when tbody still has the default placeholder)
+        if (!_wlAllEvents.length) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:20px">Chargement…</td></tr>';
+        }
         try {
-            const events = await api.getWorkloadEvents(CLUSTER, _wlSince, _wlLimit);
-            const label = _wlSince >= 1440 ? `${_wlSince/1440}j` : _wlSince >= 60 ? `${_wlSince/60}h` : `${_wlSince}min`;
-            title.textContent = `Logs du cluster — ${events.length} événement(s) sur les derniers ${label}`;
-            if (events.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:32px">Aucun log sur cette période</td></tr>';
-                return;
-            }
-            tbody.innerHTML = events.map(e => {
-                const cls = e.type === 'Warning' ? 'badge-warning' : 'badge-normal';
-                const ts = e.timestamp ? new Date(e.timestamp).toLocaleString('fr-FR') : '—';
-                return `<tr>
-                    <td style="font-size:11px;color:#7c75b8;white-space:nowrap">${e.namespace}</td>
-                    <td><span class="badge ${cls}">${e.type}</span></td>
-                    <td style="font-size:11px;color:#475569;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${e.object}">${e.object}</td>
-                    <td style="font-weight:500;white-space:nowrap">${e.reason}</td>
-                    <td style="max-width:340px;word-break:break-word;color:#475569">${e.message}</td>
-                    <td style="text-align:center;color:#a5a3c2;font-size:12px">${e.count}</td>
-                    <td style="white-space:nowrap;color:#94a3b8;font-size:12px">${ts}</td>
-                </tr>`;
-            }).join('');
+            _wlAllEvents = await api.getWorkloadEvents(CLUSTER, _wlSince, 80);
+            // Populate namespace filter from actual data
+            const nsSel = document.getElementById('wl-ns-filter');
+            const currentNs = nsSel.value;
+            const namespaces = [...new Set(_wlAllEvents.map(e => e.namespace).filter(Boolean))].sort();
+            nsSel.innerHTML = '<option value="">Tous les namespaces</option>' +
+                namespaces.map(n => `<option value="${n}"${n === currentNs ? ' selected' : ''}>${n}</option>`).join('');
+            renderWlEvents();
         } catch (err) {
-            const detail = String(err);
-            const notReady = detail.includes('kubeconfig') || detail.includes('connect') || detail.includes('refused');
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:${notReady ? '#d97706' : '#dc2626'};padding:16px">${notReady ? '⚠ Cluster pas encore accessible' : detail}</td></tr>`;
+            // Only show error on first load; on refresh silently keep previous data
+            if (!_wlAllEvents.length) {
+                const detail = String(err);
+                const unreachable = detail.includes('cluster_unreachable') || detail.includes('503')
+                    || detail.includes('kubeconfig') || detail.includes('connect') || detail.includes('refused');
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:${unreachable ? '#d97706' : '#dc2626'};padding:16px">${unreachable ? '⚠ Cluster pas encore accessible' : detail}</td></tr>`;
+            }
+        } finally {
+            _wlLoading = false;
         }
     }
 
-    function loadAll() { loadMachines(); loadEvents(); loadWorkloadEvents(); }
+    function loadAll() { loadMachines(); loadWorkloadEvents(); }
 
     loadAll();
     loadVersions();

@@ -43,6 +43,8 @@ const api = {
     },
     getVersions:     ()     => request('GET', '/templates/k8s-versions'),
     getFlavors:      ()     => request('GET', '/templates/flavors'),
+    suggestCidr:     ()     => request('GET', '/network/suggest-cidr'),
+    checkCidr:       (cidr) => request('GET', `/network/check-cidr?cidr=${encodeURIComponent(cidr)}`),
     // Cluster templates
     listTemplates:   ()     => request('GET',    '/cluster-templates/'),
     createTemplate:  (b)    => request('POST',   '/cluster-templates/',  b),

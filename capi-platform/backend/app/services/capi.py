@@ -112,8 +112,14 @@ def list_machines(namespace: str, cluster_name: str) -> list[dict]:
 
 
 def get_kubeconfig(namespace: str, cluster_name: str) -> str:
+    from fastapi import HTTPException
     secret_name = f"{cluster_name}-kubeconfig"
-    secret = _core.read_namespaced_secret(secret_name, namespace)
+    try:
+        secret = _core.read_namespaced_secret(secret_name, namespace)
+    except ApiException as e:
+        if e.status == 404:
+            raise HTTPException(status_code=404, detail=f"Kubeconfig non disponible, le cluster '{cluster_name}' est peut-être encore en cours de provisioning")
+        raise
     return base64.b64decode(secret.data["value"]).decode()
 
 

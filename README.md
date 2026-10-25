@@ -103,6 +103,46 @@ Then create the tenant from the Admin page in the UI.
 
 ---
 
+## Réseau des clusters créés (important)
+
+Depuis l'incident `datacloud-platform`, la plateforme applique une politique réseau stricte :
+
+- **Aucun `192.x.x.x`** n'est autorisé, ni pour le pod CIDR ni pour le réseau des nœuds
+  (`192.0.0.0/8` est refusé).
+- **Pod CIDR** par défaut : `100.64.0.0/16` (`POD_CIDR`), non modifiable depuis l'UI.
+- **Réseau des nœuds** : `10.6.0.0/24` → `10.250.0.0/24`, validé **côté serveur** :
+  - chevauchement réel (`ipaddress.overlaps`) avec tous les sous-réseaux OpenStack existants ;
+  - plages interdites : `192.0.0.0/8`, `172.16.0.0/12`, `169.254.0.0/16`, `127.0.0.0/8`,
+    `100.64.0.0/10` (pour le réseau nœuds), multicast/réservé.
+- **CNI** : Calico en **VXLAN** (`ipipMode: Never`), MTU auto
+  (`vxlan.calico` = MTU underlay − 50, ex. 1400 sur un underlay 1450).
+- La validation est faite dans `POST /api/clusters` (pas seulement dans l'UI) :
+  un CIDR interdit ou qui chevauche renvoie **HTTP 400**.
+- Les clusters créés avant ce correctif avec `192.168.0.0/16` doivent être recréés.
+
+### Variables d'environnement
+
+| Variable | Défaut | Rôle |
+|---|---|---|
+| `POD_CIDR` | `100.64.0.0/16` | CIDR des pods (Calico) |
+| `SERVICE_CIDR` | `10.96.0.0/12` | CIDR des services |
+| `CALICO_IPIP_MODE` | `Never` | IPIP interdit (anti-spoofing OpenStack) |
+| `CALICO_VXLAN_MODE` | `Always` | Encapsulation VXLAN |
+| `CALICO_MTU` | `0` | 0 = auto (underlay − 50) |
+
+### Prérequis du cluster de management
+
+CAPI, CAPO et ORC doivent être installés sur le cluster de management :
+
+```bash
+kubectl apply --server-side -f \
+  https://github.com/k-orc/openstack-resource-controller/releases/download/v2.0.3/install.yaml
+clusterctl init --infrastructure openstack
+kubectl apply -f k8s/rbac.yaml
+```
+
+---
+
 ## Contributing
 
 Issues and PRs are welcome.

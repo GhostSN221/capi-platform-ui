@@ -7,9 +7,9 @@ metadata:
 spec:
   clusterNetwork:
     pods:
-      cidrBlocks: ["192.168.0.0/16"]
+      cidrBlocks: ["{{ pod_cidr | default('100.64.0.0/16') }}"]
     services:
-      cidrBlocks: ["10.96.0.0/12"]
+      cidrBlocks: ["{{ service_cidr | default('10.96.0.0/12') }}"]
   infrastructureRef:
     apiGroup: infrastructure.cluster.x-k8s.io
     kind: OpenStackCluster
@@ -30,13 +30,17 @@ spec:
     name: {{ os_cloud }}-cloud-config
     type: Secret
   externalNetwork:
-    id: {{ external_network_id }}
+    id: e6ab9d94-38f5-4815-b43d-0ece9dc5bc0d
   managedSubnets:
-    - cidr: "10.6.0.0/24"
+    - cidr: "{{ node_cidr }}"
       dnsNameservers:
         - "8.8.8.8"
   managedSecurityGroups:
     allowAllInClusterTraffic: true
+{% if master_count | default(1) > 1 %}
+  apiServerLoadBalancer:
+    enabled: true
+{% endif %}
 ---
 apiVersion: controlplane.cluster.x-k8s.io/v1beta2
 kind: KubeadmControlPlane
@@ -44,7 +48,7 @@ metadata:
   name: {{ cluster_name }}-cp
   namespace: {{ namespace }}
 spec:
-  replicas: 1
+  replicas: {{ master_count | default(1) }}
   version: {{ k8s_version }}
   machineTemplate:
     spec:
@@ -59,6 +63,9 @@ spec:
           - name: cloud-provider
             value: external
     clusterConfiguration:
+      networking:
+        podSubnet: {{ pod_cidr | default('100.64.0.0/16') }}
+        serviceSubnet: {{ service_cidr | default('10.96.0.0/12') }}
       apiServer:
         extraArgs:
           - name: cloud-provider
@@ -80,6 +87,9 @@ spec:
       image:
         filter:
           name: ubuntu-2404-kube-{{ k8s_version }}
+      sshKeyName: {{ ssh_key_name | default('capi-key') }}
+      additionalSecurityGroups:
+        - id: da62a7bb-c2aa-46ef-a3ab-10c3121ae360
       identityRef:
         cloudName: {{ os_cloud }}
         name: {{ os_cloud }}-cloud-config
@@ -93,6 +103,12 @@ metadata:
 spec:
   clusterName: {{ cluster_name }}
   replicas: {{ worker_count }}
+  rollout:
+    strategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxSurge: 1
+        maxUnavailable: 0
   selector:
     matchLabels:
       cluster.x-k8s.io/cluster-name: {{ cluster_name }}
@@ -125,6 +141,9 @@ spec:
       image:
         filter:
           name: ubuntu-2404-kube-{{ k8s_version }}
+      sshKeyName: {{ ssh_key_name | default('capi-key') }}
+      additionalSecurityGroups:
+        - id: da62a7bb-c2aa-46ef-a3ab-10c3121ae360
       identityRef:
         cloudName: {{ os_cloud }}
         name: {{ os_cloud }}-cloud-config

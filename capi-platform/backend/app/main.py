@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, RedirectResponse
 from app.routers import auth, clusters, tenants, templates, setup
-from app.routers import cluster_templates, admin
+from app.routers import cluster_templates, admin, network
 from app.database import init_db, seed_db
 
 # Import all models so SQLAlchemy registers them with Base.metadata before create_all
@@ -46,6 +46,16 @@ app.include_router(templates.router,         prefix="/api/templates",         ta
 app.include_router(setup.router,             prefix="/api/setup",             tags=["setup"])
 app.include_router(cluster_templates.router, prefix="/api/cluster-templates", tags=["cluster-templates"])
 app.include_router(admin.router,             prefix="/api/admin",             tags=["admin"])
+app.include_router(network.router,           prefix="/api/network",           tags=["network"])
+
+@app.middleware("http")
+async def no_cache_html(request: Request, call_next):
+    """Prevent browsers from caching HTML pages so template updates are always picked up."""
+    response = await call_next(request)
+    if "text/html" in response.headers.get("content-type", ""):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
 
 @app.get("/", response_class=HTMLResponse)
 async def index():

@@ -47,8 +47,28 @@
             </div>
         </div>
 
-        <label>Nombre de workers</label>
-        <input id="worker_count" type="number" value="3" min="1" max="20" style="max-width:140px" />
+        <div class="form-grid-2" style="margin-top:0">
+            <div>
+                <label>Nombre de control planes</label>
+                <select id="master_count" onchange="onMasterCountChange()">
+                    <option value="1">1 — standalone</option>
+                    <option value="3">3 — haute disponibilité</option>
+                    <option value="5">5 — haute disponibilité</option>
+                </select>
+            </div>
+            <div>
+                <label>Nombre de workers</label>
+                <input id="worker_count" type="number" value="3" min="1" max="20" />
+            </div>
+        </div>
+
+        <div id="octavia-vip-info" style="display:none;background:#ede9fe;color:#6d28d9;border-radius:8px;padding:10px 14px;font-size:13px;margin-top:8px">
+            ⚡ Octavia LoadBalancer VIP sera créé automatiquement devant les <span id="octavia-cp-count"></span> control planes
+        </div>
+
+        <label>CIDR réseau des nœuds</label>
+        <input id="node_cidr" placeholder="chargement…" oninput="onCidrInput()" />
+        <div id="cidr-status" style="font-size:12px;margin-top:4px"></div>
 
         <div class="error" id="error"></div>
 
@@ -70,6 +90,36 @@
 
     let _templates = [];
 
+    let _cidrDebounce = null;
+    let _cidrValid = false;
+
+    async function onCidrInput() {
+        const cidr = document.getElementById('node_cidr').value.trim();
+        const statusEl = document.getElementById('cidr-status');
+        const input = document.getElementById('node_cidr');
+        _cidrValid = false;
+        if (!cidr) { statusEl.textContent = ''; input.style.borderColor = ''; return; }
+        statusEl.style.color = '#94a3b8';
+        statusEl.textContent = 'Vérification en cours…';
+        clearTimeout(_cidrDebounce);
+        _cidrDebounce = setTimeout(async () => {
+            try {
+                const r = await api.checkCidr(cidr);
+                if (r.available) {
+                    _cidrValid = true;
+                    input.style.borderColor = '#16a34a';
+                    statusEl.style.color = '#16a34a';
+                    statusEl.textContent = '✓ CIDR disponible';
+                } else {
+                    _cidrValid = false;
+                    input.style.borderColor = '#dc2626';
+                    statusEl.style.color = '#dc2626';
+                    statusEl.textContent = '✗ CIDR déjà utilisé — choisissez-en un autre';
+                }
+            } catch { statusEl.textContent = ''; }
+        }, 600);
+    }
+
     async function loadOptions() {
         const [versions, flavors, tpls] = await Promise.all([
             api.getVersions(), api.getFlavors(), api.listTemplates()
@@ -77,12 +127,34 @@
         _templates = tpls;
         document.getElementById('k8s_version').innerHTML =
             '<option value="">-- choisir --</option>' + versions.map(v => `<option>${v}</option>`).join('');
-        const opts = '<option value="">-- choisir --</option>' + flavors.map(f => `<option>${f}</option>`).join('');
-        document.getElementById('cp_flavor').innerHTML     = opts;
-        document.getElementById('worker_flavor').innerHTML = opts;
+        const toOpts = (list) => '<option value="">-- choisir --</option>' + list.map(f =>
+            `<option value="${f.name}">${f.name} — ${f.vcpus} vCPU / ${f.ram / 1024} GB / ${f.disk} GB</option>`
+        ).join('');
+        document.getElementById('cp_flavor').innerHTML     = toOpts(flavors.filter(f => f.name.startsWith('k8s.master')));
+        document.getElementById('worker_flavor').innerHTML = toOpts(flavors.filter(f => f.name.startsWith('k8s.node')));
         document.getElementById('template-select').innerHTML =
             '<option value="">-- aucun template --</option>' +
             tpls.map(t => `<option value="${t.id}">${t.name}${t.description ? ' — ' + t.description : ''}</option>`).join('');
+
+        // Auto-suggest CIDR libre
+        try {
+            const r = await api.suggestCidr();
+            const input = document.getElementById('node_cidr');
+            input.value = r.cidr;
+            input.placeholder = r.cidr;
+            await onCidrInput();
+        } catch {}
+    }
+
+    function onMasterCountChange() {
+        const mc = parseInt(document.getElementById('master_count').value);
+        const info = document.getElementById('octavia-vip-info');
+        if (mc > 1) {
+            document.getElementById('octavia-cp-count').textContent = mc;
+            info.style.display = 'block';
+        } else {
+            info.style.display = 'none';
+        }
     }
 
     function applyTemplate() {
@@ -94,6 +166,10 @@
         document.getElementById('cp_flavor').value     = tpl.cp_flavor;
         document.getElementById('worker_flavor').value = tpl.worker_flavor;
         document.getElementById('worker_count').value  = tpl.worker_count;
+        if (tpl.master_count) {
+            document.getElementById('master_count').value = tpl.master_count;
+            onMasterCountChange();
+        }
     }
 
     async function saveAsTemplate() {
@@ -107,6 +183,7 @@
                 cp_flavor:     document.getElementById('cp_flavor').value,
                 worker_flavor: document.getElementById('worker_flavor').value,
                 worker_count:  parseInt(document.getElementById('worker_count').value),
+                master_count:  parseInt(document.getElementById('master_count').value),
                 description:   desc,
             });
             const msg = document.getElementById('tpl-msg');
@@ -132,6 +209,7 @@
         if (!k8s_version) { errEl.textContent = 'Choisissez une version Kubernetes.'; return; }
         if (!cp_flavor)   { errEl.textContent = 'Choisissez un flavor control plane.'; return; }
         if (!wk_flavor)   { errEl.textContent = 'Choisissez un flavor workers.'; return; }
+        if (!_cidrValid)  { errEl.textContent = 'CIDR réseau invalide ou déjà utilisé.'; return; }
         errEl.textContent = '';
 
         const btn = document.getElementById('submit-btn');
@@ -142,6 +220,8 @@
                 name, k8s_version, cp_flavor,
                 worker_flavor: wk_flavor,
                 worker_count:  parseInt(document.getElementById('worker_count').value),
+                master_count:  parseInt(document.getElementById('master_count').value),
+                node_cidr:     document.getElementById('node_cidr').value.trim(),
             });
             window.location.href = '/dashboard';
         } catch (e) {

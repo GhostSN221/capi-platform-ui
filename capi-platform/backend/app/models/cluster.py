@@ -11,6 +11,7 @@ class Cluster(Base):
     k8s_version:    Mapped[str]      = mapped_column(String(16))
     cp_flavor:      Mapped[str]      = mapped_column(String(64))
     worker_flavor:  Mapped[str]      = mapped_column(String(64))
+    master_count:   Mapped[int]      = mapped_column(Integer, server_default="1", default=1)
     worker_count:   Mapped[int]      = mapped_column(Integer, default=3)
     status:         Mapped[str]      = mapped_column(String(32), default="Provisioning")
     created_at:     Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
