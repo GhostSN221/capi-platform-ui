@@ -14,9 +14,11 @@ spec:
         app: capi-platform-backend
     spec:
       serviceAccountName: capi-platform
+      imagePullSecrets:
+        - name: gitlab-registry
       containers:
         - name: backend
-          image: mouhmedsn02/capi-platform-backend:e907e627
+          image: git.systalink.fr:5050/mouhmedsn02/capi_platform_v2/capi-platform-backend:vxlan-20261025b
           ports:
             - containerPort: 8000
           envFrom:
