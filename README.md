@@ -94,6 +94,19 @@ Then create the tenant from the Admin page in the UI.
 
 ---
 
+## Documentation
+
+- [Runbook opérationnel](docs/CAPI-PLATFORM-RUNBOOK.md)
+- [Changelog](docs/CHANGELOG.md)
+
+### État actuel (30/10/2026)
+
+- **CAPI v1.14.3 + CAPO v0.15.1 + ORC v2.0.3** installés sur le cluster de management.
+- Image de référence : `git.systalink.fr:5050/mouhmedsn02/capi_platform_v2/capi-platform-backend:vxlan-20261025b`.
+- Nouveaux clusters : pod CIDR **`100.64.0.0/16`**, Calico **VXLAN**, MTU **1400**, **`192.0.0.0/8` interdit**, validation du CIDR nœuds côté serveur.
+- Cluster de test **`vxlan-test-01`** validé (1 CP + 1 worker, v1.31.6).
+- Limites connues : provisioning **Octavia** (ingress `<pending>` sur certains clusters) et **hairpin** cert-manager HTTP-01 (utiliser DNS-01 ou un override CoreDNS).
+
 ## Roadmap
 
 - Vault integration for OpenStack secrets
