@@ -8,6 +8,7 @@ from app.database import get_db
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.services.auth import get_current_user
+from app.config import settings
 
 router = APIRouter()
 
@@ -26,6 +27,8 @@ async def setup(
 ):
     if user.tenant_id:
         raise HTTPException(400, "Already configured")
+    if settings.demo_mode:
+        raise HTTPException(400, "Demo mode: tenant setup is handled by the seeded demo user")
 
     content = _load_preconfigured_clouds_yaml()
     if not content:

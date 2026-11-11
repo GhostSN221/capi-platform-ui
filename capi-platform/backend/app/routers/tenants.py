@@ -6,6 +6,7 @@ from app.models.tenant import Tenant
 from app.models.user import User
 from app.schemas.tenant import TenantCreate, TenantOut
 from app.services.auth import require_admin, get_current_user
+from app.config import settings
 from kubernetes import client as k8s_client
 
 router = APIRouter()
@@ -19,12 +20,13 @@ async def list_tenants(db: AsyncSession = Depends(get_db), _=Depends(require_adm
 
 @router.post("/", response_model=TenantOut)
 async def create_tenant(body: TenantCreate, db: AsyncSession = Depends(get_db), _=Depends(require_admin)):
-    # create k8s namespace
-    v1 = k8s_client.CoreV1Api()
-    try:
-        v1.create_namespace(k8s_client.V1Namespace(metadata=k8s_client.V1ObjectMeta(name=body.namespace)))
-    except Exception:
-        pass
+    # create k8s namespace (demo mode stays local)
+    if not settings.demo_mode:
+        v1 = k8s_client.CoreV1Api()
+        try:
+            v1.create_namespace(k8s_client.V1Namespace(metadata=k8s_client.V1ObjectMeta(name=body.namespace)))
+        except Exception:
+            pass
     t = Tenant(**body.model_dump())
     db.add(t)
     await db.commit()

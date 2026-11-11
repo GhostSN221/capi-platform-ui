@@ -7,6 +7,10 @@ class Settings(BaseSettings):
     algorithm:    str = "HS256"
     token_expire: int = 480
 
+    # Demo mode: deterministic data, no OpenStack or Kubernetes calls.
+    # Enable with DEMO_MODE=true; the compose demo file sets it.
+    demo_mode: bool = False
+
     # --- Réseau des clusters créés -------------------------------------------
     # 100.64.0.0/16 (CGNAT) : ne chevauche ni l'on-prem 192.168.x
     # (DB 192.168.120.x, Nutanix 192.168.10.x) ni le réseau des nœuds.
