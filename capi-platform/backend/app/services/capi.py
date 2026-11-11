@@ -5,16 +5,24 @@ import yaml, logging, base64
 
 log = logging.getLogger(__name__)
 
-try:
-    k8s_config.load_incluster_config()
-    log.info("In-cluster k8s config loaded")
-except Exception:
-    k8s_config.load_kube_config()
-    log.info("Local kubeconfig loaded")
+_custom = None
+_core = None
 
-_custom = client.CustomObjectsApi()
-_core   = client.CoreV1Api()
-_jinja  = Environment(loader=FileSystemLoader("app/templates"))
+try:
+    try:
+        k8s_config.load_incluster_config()
+        log.info("In-cluster k8s config loaded")
+    except Exception:
+        k8s_config.load_kube_config()
+        log.info("Local kubeconfig loaded")
+    _custom = client.CustomObjectsApi()
+    _core = client.CoreV1Api()
+except Exception as exc:
+    # Demo mode and the unit-test suite run without a kubeconfig. The demo
+    # service replaces the functions below with deterministic fake data.
+    log.warning("Kubernetes config unavailable: %s", exc)
+
+_jinja = Environment(loader=FileSystemLoader("app/templates"))
 
 CAPI_GROUP   = "cluster.x-k8s.io"
 CAPI_VERSION = "v1beta2"

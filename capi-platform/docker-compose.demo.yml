@@ -1,0 +1,40 @@
+name: capi-platform-demo
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: capi
+      POSTGRES_PASSWORD: capi
+      POSTGRES_DB: capidb
+    volumes:
+      - demo-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U capi -d capidb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    ports:
+      - "8001:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://capi:capi@postgres:5432/capidb
+      SECRET_KEY: demo-secret-key
+      DEMO_MODE: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  demo-pgdata:

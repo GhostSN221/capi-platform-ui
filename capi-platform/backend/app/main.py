@@ -6,6 +6,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, RedirectResponse
 from app.routers import auth, clusters, tenants, templates, setup
 from app.routers import cluster_templates, admin, network
+from app.config import settings
 from app.database import init_db, seed_db
 
 # Import all models so SQLAlchemy registers them with Base.metadata before create_all
@@ -36,6 +37,9 @@ jinja.env.globals["asset_v"] = _git_hash
 
 @app.on_event("startup")
 async def startup():
+    if settings.demo_mode:
+        from app.services.demo import enable_demo
+        enable_demo()
     await init_db()
     await seed_db()
 

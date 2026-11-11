@@ -16,7 +16,7 @@
   Quota de ports du projet tenant relevé de 500 à **1000** ; quotas du projet
   `service` (Octavia) relevés (2000 ports / 300 instances / 600 cores / 600 Go).
   Le provisioning d'amphora reste à corriger côté admin Octavia.
-- **`main`** mis à jour et poussé (`f7c297c`).
+- **`main`** mis à jour et poussé (`217e152`).
 
 ## 29/10/2026
 
@@ -29,7 +29,7 @@
   - patch du manifest Calico dans `post_install.py` ;
   - RBAC mis à jour (secrets en écriture, groupe `ipam.cluster.x-k8s.io`) ;
   - documentation réseau dans le README.
-- Commit `afda2fb` puis `f7c297c` (image `vxlan-20261025b`).
+- Commit `35cbb07` puis `217e152` (image `vxlan-20261025b`).
 
 ## 27/10/2026
 

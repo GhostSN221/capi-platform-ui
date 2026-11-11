@@ -18,8 +18,14 @@ CAPO_VERSION = "v1beta1"
 CAPI_GROUP   = "cluster.x-k8s.io"
 CAPI_VERSION = "v1beta2"
 
-_custom = k8s_client.CustomObjectsApi()
-_core   = k8s_client.CoreV1Api()
+try:
+    _custom = k8s_client.CustomObjectsApi()
+    _core = k8s_client.CoreV1Api()
+except Exception as exc:
+    # Demo mode and unit tests do not provide a kubeconfig.
+    log.warning("Kubernetes config unavailable for force-delete watcher: %s", exc)
+    _custom = None
+    _core = None
 
 _POLL_INTERVAL = 30       # s between polls
 _FORCE_AFTER   = 5 * 60   # strip finalizers after 5 min stuck on same error

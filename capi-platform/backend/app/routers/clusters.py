@@ -285,6 +285,19 @@ async def cluster_readiness(name: str, user: User = Depends(get_current_user), d
     from kubernetes.client.exceptions import ApiException as K8sApiException
 
     tenant = await resolve_tenant(user, db)
+
+    if settings.demo_mode:
+        ready = name == "demo-prod"
+        return {
+            "ready": ready,
+            "checks": {
+                "kubeconfig":   {"ok": True,  "label": "Kubeconfig disponible"},
+                "nodes_ready":  {"ok": ready, "label": "Nœuds Ready"},
+                "storageclass": {"ok": ready, "label": "StorageClass cinder"},
+                "csi_running":  {"ok": ready, "label": "Pod Cinder CSI Running"},
+            },
+        }
+
     kubectl = os.environ.get("KUBECTL_PATH", "/usr/local/bin/kubectl")
 
     checks = {
@@ -351,6 +364,16 @@ async def test_storage(name: str, user: User = Depends(get_current_user), db: As
     from kubernetes.client.exceptions import ApiException as K8sApiException
 
     tenant = await resolve_tenant(user, db)
+
+    if settings.demo_mode:
+        if name == "demo-dev":
+            raise HTTPException(409, "Kubeconfig non disponible — le cluster n'est pas encore prêt (demo)")
+        return {
+            "status": "Bound",
+            "size": "1Gi",
+            "storageClass": "cinder",
+            "message": "Cinder CSI fonctionnel (demo)",
+        }
 
     # Check kubeconfig exists (cluster must be provisioned)
     try:
